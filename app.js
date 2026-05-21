@@ -3,7 +3,8 @@
 const DATA_URLS = ['philosophers.json', '/philosophers.json'];
 const CAT = { on:'ontology/metaphysics', ep:'epistemology', et:'ethics', po:'politics', ae:'aesthetics', th:'theology/religion' };
 const CAT_LABEL = { 'ontology/metaphysics':'Ontology', epistemology:'Knowledge', ethics:'Ethics', politics:'Politics', aesthetics:'Art', 'theology/religion':'Theology' };
-const CAT_COLOR = { 'ontology/metaphysics':'var(--brown)', epistemology:'var(--blue)', ethics:'var(--green)', politics:'var(--red)', aesthetics:'var(--violet)', 'theology/religion':'var(--gold)' };
+const CAT_COLOR = { 'ontology/metaphysics':'var(--brown)', epistemology:'var(--blue)', ethics:'Ethics', politics:'Politics', aesthetics:'Art', 'theology/religion':'Theology' };
+const CAT_COLOR_VALUE = { 'ontology/metaphysics':'var(--brown)', epistemology:'var(--blue)', ethics:'var(--green)', politics:'var(--red)', aesthetics:'var(--violet)', 'theology/religion':'var(--gold)' };
 const CAT_ORDER = Object.keys(CAT_LABEL);
 const ROUTES = [
   {id:'time', title:'Time', icon:'◷', keys:['time','change','becoming','flux','eternal','duration','present','space'], arc:'cosmos → measure → inner time → condition → finitude'},
@@ -16,13 +17,13 @@ const ROUTES = [
   {id:'mind', title:'Mind', icon:'◉', keys:['mind','body','soul','self','consciousness','experience','subject','psychology'], arc:'soul → subject → bundle → will → body → computation'}
 ];
 const CHAPTERS = [
-  {id:'origin', label:'origin', test:s => (s.year ?? 0) < -300},
-  {id:'classical', label:'form', test:s => (s.year ?? 0) >= -300 && (s.year ?? 0) < 500},
-  {id:'medieval', label:'faith', test:s => (s.year ?? 0) >= 500 && (s.year ?? 0) < 1500},
-  {id:'modern', label:'subject', test:s => (s.year ?? 0) >= 1500 && (s.year ?? 0) < 1800},
-  {id:'history', label:'history', test:s => (s.year ?? 0) >= 1800 && (s.year ?? 0) < 1900},
-  {id:'language', label:'language', test:s => (s.year ?? 0) >= 1900 && (s.year ?? 0) < 1950},
-  {id:'systems', label:'systems', test:s => (s.year ?? 0) >= 1950}
+  {id:'origin', label:'origin', hint:'first principles', test:s => (s.year ?? 0) < -300},
+  {id:'form', label:'form', hint:'classical system', test:s => (s.year ?? 0) >= -300 && (s.year ?? 0) < 500},
+  {id:'faith', label:'faith', hint:'theological order', test:s => (s.year ?? 0) >= 500 && (s.year ?? 0) < 1500},
+  {id:'subject', label:'subject', hint:'modern knower', test:s => (s.year ?? 0) >= 1500 && (s.year ?? 0) < 1800},
+  {id:'history', label:'history', hint:'critique / becoming', test:s => (s.year ?? 0) >= 1800 && (s.year ?? 0) < 1900},
+  {id:'language', label:'language', hint:'meaning / method', test:s => (s.year ?? 0) >= 1900 && (s.year ?? 0) < 1950},
+  {id:'systems', label:'systems', hint:'power / identity', test:s => (s.year ?? 0) >= 1950}
 ];
 
 const $ = (s, r=document) => r.querySelector(s);
@@ -32,17 +33,28 @@ const count = xs => Object.entries(xs.reduce((a,x)=>(x&&(a[x]=(a[x]||0)+1),a),{}
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 
 let DB = null;
-let S = { view:'atlas', q:'', concept:null, question:null, domain:null, person:null, relation:'all', sort:'chrono', route:'time', rail:'concepts', statement:null };
+let S = { view:'atlas', q:'', concept:null, question:null, domain:null, person:null, relation:'all', sort:'chrono', route:'time', rail:'concepts', statement:null, inspect:null, open:new Set(), cols:3 };
+let resizeTimer = null;
 
 boot();
 
 async function boot(){
+  S.cols = columnCount();
   $('#q').addEventListener('input', e => { S.q = e.target.value.trim(); render(); });
   $('#theme').onclick = () => { const a=$('#app'); a.dataset.theme = a.dataset.theme === 'dark' ? 'light' : 'dark'; };
   $('#reset').onclick = reset;
   document.addEventListener('click', handleClick);
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const next = columnCount();
+      if (next !== S.cols) { S.cols = next; render(); }
+      else if (S.view === 'atlas') requestAnimationFrame(drawGraph);
+    }, 120);
+  });
   try { setDB(buildDB(await loadJSON())); } catch(e) { $('#content').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
+function columnCount(){ const w = window.innerWidth; if (w < 760) return 1; if (w < 1120) return 2; if (w > 1580) return 4; return 3; }
 async function loadJSON(){
   let err;
   for (const url of DATA_URLS) {
@@ -55,6 +67,7 @@ function handleClick(e){
   const el = e.target.closest('[data-act]'); if(!el || !DB) return;
   e.stopPropagation();
   const {act,val,kind} = el.dataset;
+  if(act==='accordion') return toggleAccordion(val, el);
   if(act==='view'){ S.view=val; S.statement=null; render(); }
   if(act==='rail'){ S.rail=val; render(); }
   if(act==='sort'){ S.sort=val; render(); }
@@ -62,21 +75,29 @@ function handleClick(e){
   if(act==='route'){ S.route=val; S.view='routes'; render(); }
   if(act==='filter') toggleFilter(kind,val);
   if(act==='clear') clearFilter(val);
-  if(act==='statement'){ S.statement=Number(val); inspectStatement(S.statement); if(S.view==='atlas') requestAnimationFrame(drawGraph); }
-  if(act==='person'){ toggleFilter('person', val); inspectPerson(Number(val)); }
-  if(act==='inspectConcept') inspectConcept(val);
-  if(act==='inspectQuestion') inspectQuestion(val);
-  if(act==='inspectDomain') inspectDomain(val);
+  if(act==='statement'){ S.statement=Number(val); S.inspect={type:'statement', id:S.statement}; renderInspector(); if(S.view==='atlas') requestAnimationFrame(drawGraph); }
+  if(act==='person'){ toggleFilter('person', val); }
+  if(act==='inspectConcept'){ S.inspect={type:'concept', id:val}; renderInspector(); }
+  if(act==='inspectQuestion'){ S.inspect={type:'question', id:val}; renderInspector(); }
+  if(act==='inspectDomain'){ S.inspect={type:'domain', id:val}; renderInspector(); }
 }
-function reset(){ S={...S,q:'',concept:null,question:null,domain:null,person:null,relation:'all',sort:'chrono',statement:null}; $('#q').value=''; render(); inspectOverview(); }
+function toggleAccordion(key, el){
+  const body = document.querySelector(`[data-accordion-body="${CSS.escape(key)}"]`);
+  if (!body) return;
+  const isClosed = body.hasAttribute('hidden');
+  if (isClosed) { body.removeAttribute('hidden'); S.open.add(key); }
+  else { body.setAttribute('hidden',''); S.open.delete(key); }
+  el.setAttribute('aria-expanded', String(isClosed));
+}
+function reset(){ S={...S,q:'',concept:null,question:null,domain:null,person:null,relation:'all',sort:'chrono',statement:null,inspect:null,open:new Set()}; $('#q').value=''; render(); }
 function toggleFilter(kind,val){
-  if(kind==='concept'){ S.concept = S.concept===val ? null : val; if(S.concept) inspectConcept(val); }
-  if(kind==='question'){ S.question = S.question===val ? null : val; if(S.question) inspectQuestion(val); }
-  if(kind==='domain'){ S.domain = S.domain===val ? null : val; if(S.domain) inspectDomain(val); }
-  if(kind==='person'){ S.person = S.person===Number(val) ? null : Number(val); if(S.person) inspectPerson(S.person); }
+  if(kind==='concept'){ S.concept = S.concept===val ? null : val; S.inspect = S.concept ? {type:'concept', id:val} : null; }
+  if(kind==='question'){ S.question = S.question===val ? null : val; S.inspect = S.question ? {type:'question', id:val} : null; }
+  if(kind==='domain'){ S.domain = S.domain===val ? null : val; S.inspect = S.domain ? {type:'domain', id:val} : null; }
+  if(kind==='person'){ S.person = S.person===Number(val) ? null : Number(val); S.inspect = S.person ? {type:'person', id:S.person} : null; }
   S.statement=null; render();
 }
-function clearFilter(k){ if(k==='q'){S.q='';$('#q').value='';} else S[k]=null; render(); }
+function clearFilter(k){ if(k==='q'){S.q='';$('#q').value='';} else S[k]=null; if (S.inspect?.type === k || (k==='person' && S.inspect?.type==='person')) S.inspect=null; render(); }
 
 function buildDB(raw){
   if(!raw?.people || !raw?.records || !raw?.links) throw new Error('Invalid philosophers.json');
@@ -102,7 +123,7 @@ function buildDB(raw){
   db.routes = ROUTES.map(r => ({...r, ids: statements.filter(s=>r.keys.some(k=>s.search.includes(k))).sort(sortChrono).map(s=>s.id)}));
   return db;
 }
-function setDB(db){ DB=db; $('#q').placeholder=`Search ${db.people.length} authors, ${db.statements.length} postulates, ${db.relations.length} links…`; render(); inspectOverview(); }
+function setDB(db){ DB=db; $('#q').placeholder=`Search ${db.people.length} authors, ${db.statements.length} postulates, ${db.relations.length} links…`; render(); }
 
 function yearOf(t=''){ const m=String(t).match(/\d+/); if(!m) return null; let y=Number(m[0]); return String(t).includes('BC') ? -y : y; }
 function movementOf(p){ const n=p.name, y=yearOf(p.time); if(['Thales','Anaximander','Anaximenes'].includes(n))return'presocratic/cosmos'; if(n==='Pythagoras')return'number/form'; if(n==='Heraclitus')return'becoming'; if(['Parmenides','Zeno of Elea'].includes(n))return'being'; if(['Leucippus & Democritus','Epicurus'].includes(n))return'atomism'; if(n==='Socrates')return'ethics'; if(n==='Plato')return'forms'; if(n==='Aristotle')return'nature/system'; if(y<1700)return'early modern'; if(y<1800)return'enlightenment'; if(y<1870)return'history/critique'; if(y<1930)return'language/science'; return'contemporary'; }
@@ -118,7 +139,7 @@ function sorter(a,b){ if(S.sort==='author') return a.person.localeCompare(b.pers
 function visible(){ const q=S.q.toLowerCase(); return DB.statements.filter(s=>{ if(S.person && s.personId!==S.person)return false; if(S.concept && !s.concepts.includes(S.concept))return false; if(S.question && !s.questions.includes(S.question))return false; if(S.domain && !s.domains.includes(S.domain))return false; if(S.relation!=='all' && !rels(s.id).some(r=>r.type===S.relation))return false; return !q || s.search.includes(q); }).sort(sorter); }
 function matchesActive(s){ return (!S.concept||s.concepts.includes(S.concept))&&(!S.question||s.questions.includes(S.question))&&(!S.domain||s.domains.includes(S.domain))&&(!S.person||s.personId===S.person); }
 
-function render(){ if(!DB)return; const st=visible(); $('#sub').textContent=`${st.length} · ${count(st.map(s=>s.person)).length} authors`; renderRail(st); const views={atlas:viewAtlas,read:viewRead,routes:viewRoutes,pressure:viewPressure}; $('#content').innerHTML=(views[S.view]||viewAtlas)(st); if(S.view==='atlas') requestAnimationFrame(drawGraph); if(!S.statement) inspectOverview(st); }
+function render(){ if(!DB)return; const st=visible(); $('#sub').textContent=`${st.length} · ${count(st.map(s=>s.person)).length} authors`; renderRail(st); const views={atlas:viewAtlas,read:viewRead,routes:viewRoutes,pressure:viewPressure}; $('#content').innerHTML=(views[S.view]||viewAtlas)(st); if(S.view==='atlas') requestAnimationFrame(drawGraph); renderInspector(st); }
 function nav(){ const items=[['atlas','Atlas','·'],['read','Read','¶'],['routes','Routes','→'],['pressure','Pressure','±']]; return items.map(([id,t,ico])=>`<button class="nav ${S.view===id?'active':''}" data-act="view" data-val="${id}"><i>${ico}</i>${t}</button>`).join(''); }
 function renderRail(st){ const filters=[]; if(S.q)filters.push(token('search',S.q,'q')); if(S.person)filters.push(token('author',DB.peopleById[S.person]?.name,'person')); if(S.concept)filters.push(token('concept',pretty(S.concept),'concept')); if(S.question)filters.push(token('question',S.question,'question')); if(S.domain)filters.push(token('domain',CAT_LABEL[S.domain]||pretty(S.domain),'domain')); $('#rail').innerHTML=`<div class="section"><div class="label">Navigate</div><div class="navGrid">${nav()}</div></div><div class="section"><div class="subLabel">Filters</div><div class="tokens">${filters.join('')||'<span class="subLabel">none</span>'}</div><div class="tabs" style="margin-top:7px"><button class="chip ${S.relation==='all'?'active':''}" data-act="relation" data-val="all">all</button><button class="chip ${S.relation==='support'?'active':''}" data-act="relation" data-val="support">+ only</button><button class="chip ${S.relation==='challenge'?'active':''}" data-act="relation" data-val="challenge">− only</button></div></div><div class="section"><div class="subLabel">Sort</div><div class="tabs"><button class="chip ${S.sort==='chrono'?'active':''}" data-act="sort" data-val="chrono">time</button><button class="chip ${S.sort==='author'?'active':''}" data-act="sort" data-val="author">author</button><button class="chip ${S.sort==='pressure'?'active':''}" data-act="sort" data-val="pressure">±</button></div></div><div class="section"><div class="subLabel">Browse</div><div class="tabs"><button class="chip ${S.rail==='concepts'?'active':''}" data-act="rail" data-val="concepts">concepts</button><button class="chip ${S.rail==='questions'?'active':''}" data-act="rail" data-val="questions">questions</button><button class="chip ${S.rail==='domains'?'active':''}" data-act="rail" data-val="domains">domains</button><button class="chip ${S.rail==='authors'?'active':''}" data-act="rail" data-val="authors">authors</button></div></div>${railList(st)}`; }
 function token(label,val,key){ return `<button class="token" data-act="clear" data-val="${key}"><b>${esc(label)} · ${esc(val)}</b><span>×</span></button>`; }
@@ -126,28 +147,50 @@ function railList(st){ if(S.rail==='concepts')return list('Concepts', count(st.f
 function list(title, rows){ return `<div class="section"><div class="subLabel">${esc(title)}</div><div class="list">${rows.join('')}</div></div>`; }
 function row(label,n,kind,val){ const active=(kind==='person'&&S.person===Number(val))||(kind==='concept'&&S.concept===val)||(kind==='question'&&S.question===val)||(kind==='domain'&&S.domain===val); return `<button class="row ${active?'active':''}" data-act="filter" data-kind="${kind}" data-val="${esc(val)}"><b>${esc(label)}</b><span>${n}</span></button>`; }
 
-function viewAtlas(st){ return `<div class="graph"><svg id="graph"></svg></div><div class="masonry">${st.slice(0,120).map(s=>`<div class="tile">${claim(s)}</div>`).join('')}</div>`; }
-function viewRead(st){ if(S.person) return authorView(DB.peopleById[S.person], st); return `<div class="masonry">${st.map(s=>`<div class="tile">${claim(s)}</div>`).join('')||empty('No postulates match.')}</div>`; }
+function masonry(items, renderItem){
+  const cols = Math.max(1, S.cols || 1);
+  const buckets = Array.from({length: cols}, () => []);
+  items.forEach((item, i) => buckets[i % cols].push(item));
+  return `<div class="masonry" style="--cols:${cols}">${buckets.map(col => `<div class="mcol">${col.map(renderItem).join('')}</div>`).join('')}</div>`;
+}
+function viewAtlas(st){ return `<div class="graph"><svg id="graph"></svg></div>${masonry(st.slice(0,120), claim)}`; }
+function viewRead(st){ if(S.person) return authorView(DB.peopleById[S.person], st); return masonry(st, claim) || empty('No postulates match.'); }
 function authorView(p, st){ return `<div class="hero"><div class="heroTop"><h2>${esc(p.name)}</h2><span class="date">${esc(p.time)}</span></div><div class="summary">${esc(p.movement)} · ${st.length} claims · ${count(st.flatMap(s=>s.concepts)).slice(0,4).map(([x])=>pretty(x)).join(' · ')}</div></div><div class="compactList">${st.map(s=>compact(s,true)).join('')}</div>`; }
-function viewRoutes(){ const r=DB.routes.find(x=>x.id===S.route)||DB.routes[0]; const st=r.ids.map(id=>DB.byId[id]).filter(matchesActive).sort(sortChrono); const groups=CHAPTERS.map(ch=>({ch, items:st.filter(ch.test)})).filter(g=>g.items.length); return `<div class="routeHeader card"><div class="tabs">${DB.routes.map(x=>`<button class="chip ${x.id===r.id?'active':''}" data-act="route" data-val="${x.id}">${esc(x.icon)} ${esc(x.title)}</button>`).join('')}</div><p style="margin-top:8px">${esc(r.arc)}</p></div><div class="routeLine">${groups.map(g=>`<section class="chapter"><div class="chapterTitle">${esc(g.ch.label)}</div>${g.items.map(s=>`<button class="routeNode" data-act="statement" data-val="${s.id}"><div class="claimTop"><b>${esc(s.person)}</b><span class="date">${esc(s.time)}</span></div><div class="text">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${relBadge(s)}</div></button>`).join('')}</section>`).join('')}</div>`; }
-function viewPressure(st){ const ranked=[...st].sort((a,b)=>score(b)-score(a)||sortChrono(a,b)).slice(0,160); return `<div class="masonry">${ranked.map(s=>`<div class="tile">${claim(s,true)}</div>`).join('')}</div>`; }
+function viewRoutes(){
+  const r=DB.routes.find(x=>x.id===S.route)||DB.routes[0];
+  const st=r.ids.map(id=>DB.byId[id]).filter(matchesActive).sort(sortChrono);
+  const groups=CHAPTERS.map(ch=>({ch, items:st.filter(ch.test)})).filter(g=>g.items.length);
+  return `<div class="routeHeader card"><div class="tabs">${DB.routes.map(x=>`<button class="chip ${x.id===r.id?'active':''}" data-act="route" data-val="${x.id}">${esc(x.icon)} ${esc(x.title)}</button>`).join('')}</div><p style="margin-top:8px">${esc(r.arc)} · ${st.length} claims</p></div><div class="routeMap">${groups.map(g=>`<section class="routeCol"><div class="chapterTitle"><b>${esc(g.ch.label)}</b><span>${g.items.length}</span></div><p style="margin-bottom:8px">${esc(g.ch.hint)}</p><div class="routeClaims">${g.items.slice(0,12).map(routeClaim).join('')}</div></section>`).join('')}</div>`;
+}
+function routeClaim(s){ return `<button class="routeClaim" data-act="statement" data-val="${s.id}"><div class="claimTop"><b>${esc(s.person)}</b><span class="date">${esc(s.time)}</span></div><div class="text">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${relBadge(s)}</div></button>`; }
+function viewPressure(st){ const ranked=[...st].sort((a,b)=>score(b)-score(a)||sortChrono(a,b)).slice(0,160); return masonry(ranked, s=>claim(s,true)); }
 
 function claim(s,showPressure=false){ return `<article class="claim" data-act="statement" data-val="${s.id}"><div class="claimTop"><div class="author"><b>${esc(s.person)}</b></div><div class="date">${esc(s.time)}</div></div><div class="text">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${relBadge(s,showPressure)}</div></article>`; }
 function compact(s,withRelations=false){ return `<button class="compact" data-act="statement" data-val="${s.id}"><div class="text">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${relBadge(s)}</div>${withRelations?`<div class="rels">${rels(s.id).slice(0,3).map(r=>relation(r,s.id)).join('')}</div>`:''}</button>`; }
 function semanticLine(s){ const cs=s.concepts.slice(0,3).map(c=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join(''); const ds=s.domains.slice(0,1).map(d=>domain(d,true)).join(''); return `${ds}${cs}`; }
 function relBadge(s,show=false){ const p=supportCount(s.id), m=challengeCount(s.id); return (p||m||show) ? `<span class="counts"><span class="plus">+${p}</span><span class="minus">−${m}</span></span>` : ''; }
 function relation(r,focus){ const o=DB.byId[r.source===focus?r.target:r.source]; return `<button class="relation ${r.type}" data-act="statement" data-val="${o.id}"><span class="mark">${r.type==='support'?'+':'−'}</span><span><b>${esc(o.person)}</b> — ${esc(o.text)}</span></button>`; }
-function domain(d,click=false){ return `<${click?'button':'span'} class="domain inspectable" ${click?`data-act="inspectDomain" data-val="${esc(d)}"`:''}><i style="background:${CAT_COLOR[d]||'var(--muted)'}"></i>${esc(CAT_LABEL[d]||pretty(d))}</${click?'button':'span'}>`; }
+function domain(d,click=false){ return `<${click?'button':'span'} class="domain inspectable" ${click?`data-act="inspectDomain" data-val="${esc(d)}"`:''}><i style="background:${CAT_COLOR_VALUE[d]||'var(--muted)'}"></i>${esc(CAT_LABEL[d]||pretty(d))}</${click?'button':'span'}>`; }
 function pretty(s){ return String(s).replaceAll('_',' ').replaceAll('/',' · '); }
 function empty(t){ return `<div class="empty">${esc(t)}</div>`; }
 
-function drawGraph(){ const svg=$('#graph'); if(!svg)return; const st=visible().slice(0,240), ids=new Set(st.map(s=>s.id)); let rs=DB.relations.filter(r=>ids.has(r.source)&&ids.has(r.target)); if(S.relation!=='all')rs=rs.filter(r=>r.type===S.relation); const w=svg.clientWidth||900,h=svg.clientHeight||420, years=DB.people.map(p=>p.year).filter(Number.isFinite), min=Math.min(...years), max=Math.max(...years), span=max-min||1, bands=Object.fromEntries(CAT_ORDER.map((c,i)=>[c,(i+1)/(CAT_ORDER.length+1)])), pos={}; st.forEach((s,i)=>{const x=32+(((s.year??0)-min)/span)*(w-64), y=(bands[s.domains[0]]||.55)*h+((i%9)-4)*4.4; pos[s.id]=[clamp(x,18,w-18),clamp(y,18,h-18)];}); svg.innerHTML=rs.slice(0,460).map(r=>{const a=pos[r.source],b=pos[r.target];return a&&b?`<line class="edge ${r.type}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`:''}).join('')+st.map(s=>{const [x,y]=pos[s.id]; return `<g data-act="statement" data-val="${s.id}"><circle cx="${x}" cy="${y}" r="${S.statement===s.id?6.5:4}" fill="${CAT_COLOR[s.domains[0]]||'var(--ink)'}"><title>${esc(s.person)} — ${esc(s.text)}</title></circle></g>`;}).join('')+uniq(st.map(s=>s.personId)).slice(0,70).map(id=>{const s=st.find(x=>x.personId===id),p=pos[s.id]; return `<text class="svglabel" x="${p[0]+6}" y="${p[1]-6}">${esc(s.person)}</text>`;}).join(''); }
+function drawGraph(){ const svg=$('#graph'); if(!svg)return; const st=visible().slice(0,240), ids=new Set(st.map(s=>s.id)); let rs=DB.relations.filter(r=>ids.has(r.source)&&ids.has(r.target)); if(S.relation!=='all')rs=rs.filter(r=>r.type===S.relation); const w=svg.clientWidth||900,h=svg.clientHeight||420, years=DB.people.map(p=>p.year).filter(Number.isFinite), min=Math.min(...years), max=Math.max(...years), span=max-min||1, bands=Object.fromEntries(CAT_ORDER.map((c,i)=>[c,(i+1)/(CAT_ORDER.length+1)])), pos={}; st.forEach((s,i)=>{const x=32+(((s.year??0)-min)/span)*(w-64), y=(bands[s.domains[0]]||.55)*h+((i%9)-4)*4.4; pos[s.id]=[clamp(x,18,w-18),clamp(y,18,h-18)];}); svg.innerHTML=rs.slice(0,460).map(r=>{const a=pos[r.source],b=pos[r.target];return a&&b?`<line class="edge ${r.type}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`:''}).join('')+st.map(s=>{const [x,y]=pos[s.id]; return `<g data-act="statement" data-val="${s.id}"><circle cx="${x}" cy="${y}" r="${S.statement===s.id?6.5:4}" fill="${CAT_COLOR_VALUE[s.domains[0]]||'var(--ink)'}"><title>${esc(s.person)} — ${esc(s.text)}</title></circle></g>`;}).join('')+uniq(st.map(s=>s.personId)).slice(0,70).map(id=>{const s=st.find(x=>x.personId===id),p=pos[s.id]; return `<text class="svglabel" x="${p[0]+6}" y="${p[1]-6}">${esc(s.person)}</text>`;}).join(''); }
 
+function renderInspector(st=visible()){
+  if(!S.inspect) return inspectOverview(st);
+  if(S.inspect.type==='statement') return inspectStatement(S.inspect.id);
+  if(S.inspect.type==='person') return inspectPerson(S.inspect.id);
+  if(S.inspect.type==='concept') return inspectConcept(S.inspect.id);
+  if(S.inspect.type==='question') return inspectQuestion(S.inspect.id);
+  if(S.inspect.type==='domain') return inspectDomain(S.inspect.id);
+  inspectOverview(st);
+}
 function inspectOverview(st=visible()){ $('#context').innerHTML=`<div class="card"><div class="subLabel">Now</div><div class="miniGrid"><div class="stat"><b>${st.length}</b><span>claims</span></div><div class="stat"><b>${count(st.map(s=>s.person)).length}</b><span>authors</span></div><div class="stat"><b>${count(st.flatMap(s=>s.concepts)).length}</b><span>ideas</span></div><div class="stat"><b>${st.reduce((a,s)=>a+score(s),0)}</b><span>links</span></div></div></div>`; }
 function inspectPerson(id){ const p=DB.peopleById[id], st=(DB.byPerson[id]||[]).filter(matchesActive); $('#context').innerHTML=`<div class="card"><div class="claimTop"><h3>${esc(p.name)}</h3><span class="date">${esc(p.time)}</span></div><p>${esc(p.movement)} · ${st.length}</p><div class="meta">${count(st.flatMap(s=>s.concepts)).slice(0,6).map(([c])=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join('')}</div></div><div class="card" style="margin-top:10px"><div class="subLabel">Claims</div><div class="postulates">${st.slice(0,18).map(s=>`<button class="postulate" data-act="statement" data-val="${s.id}">${esc(s.text)}</button>`).join('')}</div></div>`; }
 function inspectStatement(id){ const s=DB.byId[id]; if(!s)return; S.statement=id; $('#context').innerHTML=`<div class="card"><div class="claimTop"><h3>${esc(s.person)}</h3><span class="date">${esc(s.time)}</span></div><p>${esc(s.summary)} · ${esc(s.movement)}</p><div class="text" style="margin-top:8px">${esc(s.text)}</div><div class="meta">${s.domains.map(d=>domain(d,true)).join('')}${s.concepts.map(c=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join('')}${s.questions.slice(0,3).map(q=>`<button class="question inspectable" data-act="inspectQuestion" data-val="${esc(q)}">${esc(q)}</button>`).join('')}</div></div><div class="card" style="margin-top:10px"><div class="subLabel">+</div><div class="rels">${rels(id).filter(r=>r.type==='support').map(r=>relation(r,id)).join('')||'<p>None.</p>'}</div></div><div class="card" style="margin-top:10px"><div class="subLabel">−</div><div class="rels">${rels(id).filter(r=>r.type==='challenge').map(r=>relation(r,id)).join('')||'<p>None.</p>'}</div></div>`; }
-function collapsible(st){ const groups=Object.values(st.reduce((a,s)=>((a[s.person]||=[]).push(s),a),{})).sort((a,b)=>sortChrono(a[0],b[0])); return groups.map(g=>`<details class="accordion"><summary><b>${esc(g[0].person)}</b><span>${esc(g[0].time)} · ${g.length}</span></summary><div class="postulates">${g.map(s=>`<button class="postulate" data-act="statement" data-val="${s.id}">${esc(s.text)}</button>`).join('')}</div></details>`).join(''); }
-function inspectConcept(name){ const st=DB.statements.filter(s=>s.concepts.includes(name)); $('#context').innerHTML=`<div class="card"><div class="claimTop"><h3>${esc(pretty(name))}</h3><span class="date">${st.length}</span></div><p>${conceptArc(st)}</p><div class="meta">${count(st.flatMap(s=>s.concepts)).filter(([x])=>x!==name).slice(0,6).map(([c])=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join('')}</div></div><div class="card" style="margin-top:10px"><div class="subLabel">Authors</div>${collapsible(st)}</div>`; }
-function inspectQuestion(name){ const st=DB.statements.filter(s=>s.questions.includes(name)); $('#context').innerHTML=`<div class="card"><div class="claimTop"><h3>${esc(name)}</h3><span class="date">${st.length}</span></div><p>${count(st.map(s=>s.person)).length} authors · ${count(st.flatMap(s=>s.concepts)).length} ideas</p><div class="meta">${count(st.flatMap(s=>s.concepts)).slice(0,6).map(([c])=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join('')}</div></div><div class="card" style="margin-top:10px"><div class="subLabel">Authors</div>${collapsible(st)}</div>`; }
-function inspectDomain(name){ const st=DB.statements.filter(s=>s.domains.includes(name)); $('#context').innerHTML=`<div class="card"><div class="claimTop"><h3>${esc(CAT_LABEL[name]||pretty(name))}</h3><span class="date">${st.length}</span></div><p>${count(st.map(s=>s.person)).length} authors</p><div class="meta">${count(st.flatMap(s=>s.concepts)).slice(0,8).map(([c])=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join('')}</div></div><div class="card" style="margin-top:10px"><div class="subLabel">Authors</div>${collapsible(st)}</div>`; }
+function accordion(key,title,countText,body,openDefault=false){ const open = S.open.has(key) || openDefault; return `<div class="accordion"><button class="accordionHead" data-act="accordion" data-val="${esc(key)}" aria-expanded="${open}"><b>${esc(title)}</b><span>${esc(countText)}</span></button><div class="accordionBody" data-accordion-body="${esc(key)}" ${open?'':'hidden'}>${body}</div></div>`; }
+function collapsible(st, prefix){ const groups=Object.values(st.reduce((a,s)=>((a[s.person]||=[]).push(s),a),{})).sort((a,b)=>sortChrono(a[0],b[0])); return groups.map((g,i)=>accordion(`${prefix}:${g[0].personId}`, g[0].person, `${g[0].time} · ${g.length}`, `<div class="postulates">${g.map(s=>`<button class="postulate" data-act="statement" data-val="${s.id}">${esc(s.text)}</button>`).join('')}</div>`, i===0)).join(''); }
+function inspectConcept(name){ const st=DB.statements.filter(s=>s.concepts.includes(name)); $('#context').innerHTML=`<div class="card"><div class="claimTop"><h3>${esc(pretty(name))}</h3><span class="date">${st.length}</span></div><p>${conceptArc(st)}</p><div class="meta">${count(st.flatMap(s=>s.concepts)).filter(([x])=>x!==name).slice(0,6).map(([c])=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join('')}</div></div><div class="card" style="margin-top:10px"><div class="subLabel">Authors</div>${collapsible(st, `concept:${name}`)}</div>`; }
+function inspectQuestion(name){ const st=DB.statements.filter(s=>s.questions.includes(name)); $('#context').innerHTML=`<div class="card"><div class="claimTop"><h3>${esc(name)}</h3><span class="date">${st.length}</span></div><p>${count(st.map(s=>s.person)).length} authors · ${count(st.flatMap(s=>s.concepts)).length} ideas</p><div class="meta">${count(st.flatMap(s=>s.concepts)).slice(0,6).map(([c])=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join('')}</div></div><div class="card" style="margin-top:10px"><div class="subLabel">Authors</div>${collapsible(st, `question:${name}`)}</div>`; }
+function inspectDomain(name){ const st=DB.statements.filter(s=>s.domains.includes(name)); $('#context').innerHTML=`<div class="card"><div class="claimTop"><h3>${esc(CAT_LABEL[name]||pretty(name))}</h3><span class="date">${st.length}</span></div><p>${count(st.map(s=>s.person)).length} authors</p><div class="meta">${count(st.flatMap(s=>s.concepts)).slice(0,8).map(([c])=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join('')}</div></div><div class="card" style="margin-top:10px"><div class="subLabel">Authors</div>${collapsible(st, `domain:${name}`)}</div>`; }
 function conceptArc(st){ const years=st.map(s=>s.year).filter(Number.isFinite); const a=st[0]?.person||'early', b=st[st.length-1]?.person||'late'; return `${a} → ${b} · ${count(st.map(s=>s.person)).length} authors · ${years.length?Math.min(...years)+' / '+Math.max(...years):''}`; }
