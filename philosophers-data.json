@@ -1,0 +1,15 @@
+{
+  "kind": "remote-source",
+  "title": "Deniz C. O. Philosophers JSON",
+  "sourceUrl": "https://gist.githubusercontent.com/visnup/28034a969b425c38d4f5b9837503865c/raw/b9cc8bb20ab78a4556aeef3c22eb31ff90c21e8a/philosophers.json",
+  "expected": {
+    "people": 119,
+    "records": 839,
+    "links": 952
+  },
+  "uploadFormats": [
+    "original philosophers.json",
+    "enriched plaintext .txt",
+    "grouped/reflowed plaintext .txt"
+  ]
+}
