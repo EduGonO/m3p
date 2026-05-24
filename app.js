@@ -34,41 +34,14 @@ const count = xs => Object.entries(xs.reduce((a,x)=>(x&&(a[x]=(a[x]||0)+1),a),{}
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 
 let DB = null;
-let S = {
-  view:'atlas', q:'', concept:null, question:null, domain:null, person:null,
-  relation:'all', sort:'author', route:'time', rail:'concepts', inspect:null,
-  expanded:new Set(), open:new Set()
-};
+let S = { view:'atlas', q:'', concept:null, question:null, domain:null, person:null, relation:'all', sort:'author', route:'time', rail:'concepts', inspect:null, expanded:new Set(), open:new Set() };
 
 boot();
 
 async function boot(){
-  injectPolishCSS();
   $('#q').addEventListener('input', e => { S.q = e.target.value.trim(); render(); });
   document.addEventListener('click', handleClick);
   try { setDB(buildDB(await loadJSON())); } catch(e) { $('#content').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
-}
-function injectPolishCSS(){
-  if(document.getElementById('claim-polish-css')) return;
-  const style = document.createElement('style');
-  style.id = 'claim-polish-css';
-  style.textContent = `
-    .line{grid-template-columns:minmax(0,1fr)!important;}
-    .expanded{grid-column:1!important;margin:7px 0 0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;}
-    .counts{appearance:none;border:1px solid transparent;background:transparent;border-radius:999px;padding:2px 5px;display:inline-flex;gap:5px;align-items:center;font:10px/1 var(--mono);transition:background .14s ease,border-color .14s ease,box-shadow .14s ease;}
-    .counts:hover,.counts[aria-expanded=true]{border-color:color-mix(in srgb,var(--blue) 28%,var(--line));background:rgba(255,255,255,.20);box-shadow:0 6px 18px rgba(36,92,255,.06);}
-    .author:hover,.clusterAuthor:hover{background:transparent!important;border-color:transparent!important;box-shadow:none!important;text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:.08em;}
-    .authorCluster{border-bottom:1px solid var(--hair);padding:9px 10px;}
-    .authorCluster:last-child{border-bottom:0;}
-    .clusterHead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:baseline;margin-bottom:6px;}
-    .clusterAuthor{appearance:none;justify-self:start;max-width:100%;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;text-align:left;font-weight:720;font-size:12.5px;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-    .clusterClaims{display:grid;gap:4px;margin-left:4px;padding-left:11px;border-left:1px solid var(--hair);}
-    .clusterLine{display:block;width:100%;padding:6px 7px;border:1px solid transparent;border-radius:11px;background:transparent;text-align:left;transition:background .14s ease,border-color .14s ease,box-shadow .14s ease;}
-    .clusterLine:hover{border-color:color-mix(in srgb,var(--blue) 30%,var(--line));background:rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(36,92,255,.045);}
-    .clusterLine .claimText{font-size:13px;line-height:1.36;}
-    .clusterLine .meta{margin-top:5px;}
-  `;
-  document.head.appendChild(style);
 }
 async function loadJSON(){
   let err;
@@ -82,7 +55,7 @@ function handleClick(e){
   const el = e.target.closest('[data-act]'); if(!el || !DB) return;
   e.stopPropagation();
   const {act,val,kind} = el.dataset;
-  if(act==='theme'){ const app=$('#app'); app.dataset.theme = app.dataset_theme === 'dark' ? 'light' : 'dark'; return; }
+  if(act==='theme'){ const app=$('#app'); app.dataset.theme = app.dataset.theme === 'dark' ? 'light' : 'dark'; return; }
   if(act==='reset'){ reset(); return; }
   if(act==='view'){ S.view=val; S.inspect=null; render(); return; }
   if(act==='rail'){ S.rail=val; render(); return; }
@@ -154,8 +127,7 @@ function rels(id){ return [...(DB.out[id]||[]), ...(DB.in[id]||[])]; }
 function supportCount(id){ return rels(id).filter(r=>r.type==='support').length; }
 function challengeCount(id){ return rels(id).filter(r=>r.type==='challenge').length; }
 function score(s){ return rels(s.id).length; }
-function sorter(a,b){ if(S.sort==='author') return sortChrono(a,b); return sortChrono(a,b); }
-function visible(){ const q=S.q.toLowerCase(); return DB.statements.filter(s=>{ if(S.person && s.personId!==S.person)return false; if(S.concept && !s.concepts.includes(S.concept))return false; if(S.question && !s.questions.includes(S.question))return false; if(S.domain && !s.domains.includes(S.domain))return false; if(S.relation!=='all' && !rels(s.id).some(r=>r.type===S.relation))return false; return !q || s.search.includes(q); }).sort(sorter); }
+function visible(){ const q=S.q.toLowerCase(); return DB.statements.filter(s=>{ if(S.person && s.personId!==S.person)return false; if(S.concept && !s.concepts.includes(S.concept))return false; if(S.question && !s.questions.includes(S.question))return false; if(S.domain && !s.domains.includes(S.domain))return false; if(S.relation!=='all' && !rels(s.id).some(r=>r.type===S.relation))return false; return !q || s.search.includes(q); }).sort(sortChrono); }
 function matchesActive(s){ return (!S.concept||s.concepts.includes(S.concept))&&(!S.question||s.questions.includes(S.question))&&(!S.domain||s.domains.includes(S.domain))&&(!S.person||s.personId===S.person); }
 
 function render(){ if(!DB)return; const st=visible(); renderRail(st); $('#content').innerHTML=({atlas:viewAtlas,read:viewRead,routes:viewRoutes,pressure:viewPressure}[S.view]||viewAtlas)(st); if(S.view==='atlas') requestAnimationFrame(drawGraph); renderInspector(st); }
@@ -178,20 +150,11 @@ function groupTitle(g){ return g.personId ? `<button class="clusterAuthor" data-
 function outline(groups, opts={}){ return `<div class="outline">${groups.map(g=>`<section class="group"><div class="groupHead">${groupTitle(g)}<span class="count">${esc(g.meta || '')}</span></div>${renderRuns(g.items, opts)}</section>`).join('') || empty('No postulates match.')}</div>`; }
 function renderRuns(items, opts={}){
   const runs=[];
-  for(const s of items){
-    const last=runs[runs.length-1];
-    if(last && last[0].personId===s.personId) last.push(s); else runs.push([s]);
-  }
+  for(const s of items){ const last=runs[runs.length-1]; if(last && last[0].personId===s.personId) last.push(s); else runs.push([s]); }
   return runs.map(run => run.length>1 ? authorCluster(run, opts) : claimLine(run[0], opts)).join('');
 }
-function authorCluster(run, opts={}){
-  const first=run[0];
-  return `<section class="authorCluster"><div class="clusterHead"><button class="clusterAuthor" data-act="inspectPerson" data-val="${first.personId}">${esc(first.person)}</button><span class="date">${esc(first.time)}</span></div><div class="clusterClaims">${run.map(s=>clusterLine(s, opts)).join('')}</div></section>`;
-}
-function clusterLine(s, opts={}){
-  const expanded=S.expanded.has(s.id);
-  return `<article class="clusterLine" data-act="inspectStatement" data-val="${s.id}"><div class="claimText">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${opts.variant==='pressure'?`<span class="mono">${score(s)} links</span>`:''}</div>${expanded?expandedBlock(s):''}</article>`;
-}
+function authorCluster(run, opts={}){ const first=run[0]; return `<section class="authorCluster"><div class="clusterHead"><button class="clusterAuthor" data-act="inspectPerson" data-val="${first.personId}">${esc(first.person)}</button><span class="date">${esc(first.time)}</span></div><div class="clusterClaims">${run.map(s=>clusterLine(s, opts)).join('')}</div></section>`; }
+function clusterLine(s, opts={}){ const expanded=S.expanded.has(s.id); return `<article class="clusterLine" data-act="inspectStatement" data-val="${s.id}"><div class="claimText">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${opts.variant==='pressure'?`<span class="mono">${score(s)} links</span>`:''}</div>${expanded?expandedBlock(s):''}</article>`; }
 function claimLine(s, opts={}){ const expanded=S.expanded.has(s.id); return `<article class="line" data-act="inspectStatement" data-val="${s.id}"><div class="lineMain"><div class="lineTop"><button class="author" data-act="inspectPerson" data-val="${s.personId}">${esc(s.person)}</button><span class="date">${esc(s.time)}</span></div><div class="claimText">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${opts.variant==='pressure'?`<span class="mono">${score(s)} links</span>`:''}</div>${expanded?expandedBlock(s):''}</div></article>`; }
 function expandedBlock(s){ const links=rels(s.id).slice(0,12); return `<div class="expanded"><div class="relList">${links.map(r=>relation(r,s.id)).join('') || '<p>no links</p>'}</div></div>`; }
 function semanticLine(s){ const expanded=S.expanded.has(s.id); const ds=s.domains.slice(0,1).map(d=>domain(d,true)).join(''); const cs=s.concepts.slice(0,3).map(c=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join(''); return `${ds}${cs}<button class="counts" data-act="expand" data-val="${s.id}" aria-expanded="${expanded}" title="${expanded?'Collapse links':'Expand links'}"><span class="plus">+${supportCount(s.id)}</span><span class="minus">−${challengeCount(s.id)}</span></button>`; }
