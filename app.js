@@ -36,7 +36,7 @@ const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 let DB = null;
 let S = {
   view:'atlas', q:'', concept:null, question:null, domain:null, person:null,
-  relation:'all', sort:'chrono', route:'time', rail:'concepts', inspect:null,
+  relation:'all', sort:'author', route:'time', rail:'concepts', inspect:null,
   expanded:new Set(), open:new Set()
 };
 
@@ -82,7 +82,7 @@ function handleClick(e){
   const el = e.target.closest('[data-act]'); if(!el || !DB) return;
   e.stopPropagation();
   const {act,val,kind} = el.dataset;
-  if(act==='theme'){ const app=$('#app'); app.dataset.theme = app.dataset.theme === 'dark' ? 'light' : 'dark'; return; }
+  if(act==='theme'){ const app=$('#app'); app.dataset.theme = app.dataset_theme === 'dark' ? 'light' : 'dark'; return; }
   if(act==='reset'){ reset(); return; }
   if(act==='view'){ S.view=val; S.inspect=null; render(); return; }
   if(act==='rail'){ S.rail=val; render(); return; }
@@ -115,7 +115,7 @@ function toggleAccordion(key, el){
   open ? S.open.add(key) : S.open.delete(key);
   el.setAttribute('aria-expanded', String(open));
 }
-function reset(){ S={...S,q:'',concept:null,question:null,domain:null,person:null,relation:'all',sort:'chrono',inspect:null,expanded:new Set(),open:new Set()}; $('#q').value=''; render(); }
+function reset(){ S={...S,q:'',concept:null,question:null,domain:null,person:null,relation:'all',sort:'author',inspect:null,expanded:new Set(),open:new Set()}; $('#q').value=''; render(); }
 function clearFilter(k){ if(k==='q'){S.q='';$('#q').value='';} else S[k]=null; if(S.inspect?.type===k || (k==='person'&&S.inspect?.type==='person')) S.inspect=null; render(); }
 
 function buildDB(raw){
@@ -154,13 +154,13 @@ function rels(id){ return [...(DB.out[id]||[]), ...(DB.in[id]||[])]; }
 function supportCount(id){ return rels(id).filter(r=>r.type==='support').length; }
 function challengeCount(id){ return rels(id).filter(r=>r.type==='challenge').length; }
 function score(s){ return rels(s.id).length; }
-function sorter(a,b){ if(S.sort==='author') return a.person.localeCompare(b.person)||Number(a.order||0)-Number(b.order||0); if(S.sort==='pressure') return score(b)-score(a)||sortChrono(a,b); return sortChrono(a,b); }
+function sorter(a,b){ if(S.sort==='author') return sortChrono(a,b); return sortChrono(a,b); }
 function visible(){ const q=S.q.toLowerCase(); return DB.statements.filter(s=>{ if(S.person && s.personId!==S.person)return false; if(S.concept && !s.concepts.includes(S.concept))return false; if(S.question && !s.questions.includes(S.question))return false; if(S.domain && !s.domains.includes(S.domain))return false; if(S.relation!=='all' && !rels(s.id).some(r=>r.type===S.relation))return false; return !q || s.search.includes(q); }).sort(sorter); }
 function matchesActive(s){ return (!S.concept||s.concepts.includes(S.concept))&&(!S.question||s.questions.includes(S.question))&&(!S.domain||s.domains.includes(S.domain))&&(!S.person||s.personId===S.person); }
 
 function render(){ if(!DB)return; const st=visible(); renderRail(st); $('#content').innerHTML=({atlas:viewAtlas,read:viewRead,routes:viewRoutes,pressure:viewPressure}[S.view]||viewAtlas)(st); if(S.view==='atlas') requestAnimationFrame(drawGraph); renderInspector(st); }
 function nav(){ return [['atlas','Atlas','·'],['read','Read','¶'],['routes','Routes','→'],['pressure','Pressure','±']].map(([id,t,ico])=>`<button class="nav ${S.view===id?'active':''}" data-act="view" data-val="${id}"><i>${ico}</i>${t}</button>`).join(''); }
-function renderRail(st){ const filters=[]; if(S.q)filters.push(token('search',S.q,'q')); if(S.person)filters.push(token('author',DB.peopleById[S.person]?.name,'person')); if(S.concept)filters.push(token('concept',pretty(S.concept),'concept')); if(S.question)filters.push(token('question',S.question,'question')); if(S.domain)filters.push(token('domain',CAT_LABEL[S.domain]||pretty(S.domain),'domain')); $('#rail').innerHTML=`<div class="section"><div class="label">Navigate</div><div class="navGrid">${nav()}</div></div><div class="section"><div class="subLabel">Controls</div><div class="tabs"><button class="chip" data-act="theme">Theme</button><button class="chip" data-act="reset">Reset</button></div></div><div class="section"><div class="subLabel">Filters</div><div class="tokens">${filters.join('')||'<span class="subLabel">none</span>'}</div><div class="tabs" style="margin-top:7px"><button class="chip ${S.relation==='all'?'active':''}" data-act="relation" data-val="all">all</button><button class="chip ${S.relation==='support'?'active':''}" data-act="relation" data-val="support">+ only</button><button class="chip ${S.relation==='challenge'?'active':''}" data-act="relation" data-val="challenge">− only</button></div></div><div class="section"><div class="subLabel">Sort</div><div class="tabs"><button class="chip ${S.sort==='chrono'?'active':''}" data-act="sort" data-val="chrono">time</button><button class="chip ${S.sort==='author'?'active':''}" data-act="sort" data-val="author">author</button><button class="chip ${S.sort==='pressure'?'active':''}" data-act="sort" data-val="pressure">±</button></div></div><div class="section"><div class="subLabel">Browse</div><div class="tabs"><button class="chip ${S.rail==='concepts'?'active':''}" data-act="rail" data-val="concepts">concepts</button><button class="chip ${S.rail==='questions'?'active':''}" data-act="rail" data-val="questions">questions</button><button class="chip ${S.rail==='domains'?'active':''}" data-act="rail" data-val="domains">domains</button><button class="chip ${S.rail==='authors'?'active':''}" data-act="rail" data-val="authors">authors</button></div></div>${railList(st)}`; }
+function renderRail(st){ const filters=[]; if(S.q)filters.push(token('search',S.q,'q')); if(S.person)filters.push(token('author',DB.peopleById[S.person]?.name,'person')); if(S.concept)filters.push(token('concept',pretty(S.concept),'concept')); if(S.question)filters.push(token('question',S.question,'question')); if(S.domain)filters.push(token('domain',CAT_LABEL[S.domain]||pretty(S.domain),'domain')); $('#rail').innerHTML=`<div class="section"><div class="label">Navigate</div><div class="navGrid">${nav()}</div></div><div class="section"><div class="subLabel">Controls</div><div class="tabs"><button class="chip" data-act="theme">Theme</button><button class="chip" data-act="reset">Reset</button></div></div><div class="section"><div class="subLabel">Filters</div><div class="tokens">${filters.join('')||'<span class="subLabel">none</span>'}</div><div class="tabs" style="margin-top:7px"><button class="chip ${S.relation==='all'?'active':''}" data-act="relation" data-val="all">all</button><button class="chip ${S.relation==='support'?'active':''}" data-act="relation" data-val="support">+ only</button><button class="chip ${S.relation==='challenge'?'active':''}" data-act="relation" data-val="challenge">− only</button></div></div><div class="section"><div class="subLabel">Sort</div><div class="tabs"><button class="chip ${S.sort==='author'?'active':''}" data-act="sort" data-val="author">author</button><button class="chip ${S.sort==='time'?'active':''}" data-act="sort" data-val="time">time</button><button class="chip ${S.sort==='era'?'active':''}" data-act="sort" data-val="era">era</button></div></div><div class="section"><div class="subLabel">Browse</div><div class="tabs"><button class="chip ${S.rail==='concepts'?'active':''}" data-act="rail" data-val="concepts">concepts</button><button class="chip ${S.rail==='questions'?'active':''}" data-act="rail" data-val="questions">questions</button><button class="chip ${S.rail==='domains'?'active':''}" data-act="rail" data-val="domains">domains</button><button class="chip ${S.rail==='authors'?'active':''}" data-act="rail" data-val="authors">authors</button></div></div>${railList(st)}`; }
 function token(label,val,key){ return `<button class="token" data-act="clear" data-val="${key}"><b>${esc(label)} · ${esc(val)}</b><span>×</span></button>`; }
 function railList(st){ if(S.rail==='concepts')return list('Concepts', count(st.flatMap(s=>s.concepts)).slice(0,36).map(([n,c])=>row(pretty(n),c,'concept',n))); if(S.rail==='questions')return list('Questions', count(st.flatMap(s=>s.questions)).slice(0,28).map(([n,c])=>row(n,c,'question',n))); if(S.rail==='domains')return list('Domains', DB.domains.map(d=>row(CAT_LABEL[d.name]||pretty(d.name),d.count,'domain',d.name))); return list('Authors', count(st.map(s=>s.person)).slice(0,32).map(([n,c])=>{const p=DB.people.find(x=>x.name===n); return row(n,c,'person',p?.id)})); }
 function list(title, rows){ return `<div class="section"><div class="subLabel">${esc(title)}</div><div class="list">${rows.join('')}</div></div>`; }
@@ -171,10 +171,11 @@ function viewRead(st){ if(S.person) return authorView(DB.peopleById[S.person], s
 function viewPressure(st){ const ranked=[...st].sort((a,b)=>score(b)-score(a)||sortChrono(a,b)).slice(0,160); return outline([{title:'±', meta:`${ranked.length}`, items:ranked}], {variant:'pressure'}); }
 function viewRoutes(){ const r=DB.routes.find(x=>x.id===S.route)||DB.routes[0]; const st=r.ids.map(id=>DB.byId[id]).filter(matchesActive).sort(sortChrono); const groups=CHAPTERS.map(ch=>({title:ch.label, meta:`${ch.hint} · ${st.filter(ch.test).length}`, items:st.filter(ch.test)})).filter(g=>g.items.length); return `<div class="hero"><div class="tabs">${DB.routes.map(x=>`<button class="chip ${x.id===r.id?'active':''}" data-act="route" data-val="${x.id}">${esc(x.icon)} ${esc(x.title)}</button>`).join('')}</div><p style="margin-top:8px">${esc(r.arc)} · ${st.length}</p></div><div class="chapters">${groups.map(g=>`<section class="chapter"><div class="chapterTitle"><b>${esc(g.title)}</b><span>${esc(g.meta)}</span></div>${renderRuns(g.items.slice(0,18), {variant:'route'})}</section>`).join('')}</div>`; }
 function authorView(p, st){ const groups = count(st.flatMap(s=>s.domains)).map(([d])=>({title:CAT_LABEL[d]||pretty(d), meta:d, items:st.filter(s=>s.domains.includes(d))})); return `<div class="hero"><div class="heroTop"><h2>${esc(p.name)}</h2><span class="date">${esc(p.time)}</span></div><p>${esc(p.movement)} · ${st.length} claims · ${count(st.flatMap(s=>s.concepts)).slice(0,4).map(([x])=>pretty(x)).join(' · ')}</p></div>${outline(groups)}`; }
-function groupForRead(st){ if(S.concept||S.question||S.domain) return groupByAuthor(st); return groupByPeriod(st); }
-function groupByAuthor(st){ return Object.values(st.reduce((a,s)=>((a[s.person]||=[]).push(s),a),{})).sort((a,b)=>sortChrono(a[0],b[0])).map(g=>({title:g[0].person, meta:`${g[0].time} · ${g.length}`, items:g})); }
-function groupByPeriod(st){ return CHAPTERS.map(ch=>({title:ch.label, meta:`${ch.hint}`, items:st.filter(ch.test)})).filter(g=>g.items.length); }
-function outline(groups, opts={}){ return `<div class="outline">${groups.map(g=>`<section class="group"><div class="groupHead"><b>${esc(g.title)}</b><span class="count">${esc(g.meta)}</span></div>${renderRuns(g.items, opts)}</section>`).join('') || empty('No postulates match.')}</div>`; }
+function groupForRead(st){ if(S.sort==='era') return groupByPeriod(st); if(S.sort==='time') return [{title:'time', meta:`${st.length}`, items:[...st].sort(sortChrono)}]; return groupByAuthor(st); }
+function groupByAuthor(st){ return Object.values(st.reduce((a,s)=>((a[s.personId]||=[]).push(s),a),{})).sort((a,b)=>sortChrono(a[0],b[0])).map(g=>({title:g[0].person, meta:g[0].time, personId:g[0].personId, items:g.sort(sortChrono)})); }
+function groupByPeriod(st){ return CHAPTERS.map(ch=>({title:ch.label, meta:`${ch.hint}`, items:st.filter(ch.test).sort(sortChrono)})).filter(g=>g.items.length); }
+function groupTitle(g){ return g.personId ? `<button class="clusterAuthor" data-act="inspectPerson" data-val="${g.personId}">${esc(g.title)}</button>` : `<b>${esc(g.title)}</b>`; }
+function outline(groups, opts={}){ return `<div class="outline">${groups.map(g=>`<section class="group"><div class="groupHead">${groupTitle(g)}<span class="count">${esc(g.meta || '')}</span></div>${renderRuns(g.items, opts)}</section>`).join('') || empty('No postulates match.')}</div>`; }
 function renderRuns(items, opts={}){
   const runs=[];
   for(const s of items){
@@ -185,7 +186,7 @@ function renderRuns(items, opts={}){
 }
 function authorCluster(run, opts={}){
   const first=run[0];
-  return `<section class="authorCluster"><div class="clusterHead"><button class="clusterAuthor" data-act="inspectPerson" data-val="${first.personId}">${esc(first.person)}</button><span class="date">${esc(first.time)} · ${run.length}</span></div><div class="clusterClaims">${run.map(s=>clusterLine(s, opts)).join('')}</div></section>`;
+  return `<section class="authorCluster"><div class="clusterHead"><button class="clusterAuthor" data-act="inspectPerson" data-val="${first.personId}">${esc(first.person)}</button><span class="date">${esc(first.time)}</span></div><div class="clusterClaims">${run.map(s=>clusterLine(s, opts)).join('')}</div></section>`;
 }
 function clusterLine(s, opts={}){
   const expanded=S.expanded.has(s.id);
