@@ -27,17 +27,88 @@
   <script src="app.js" defer></script>
   <script>
     (() => {
-      const cleanClusterCounts = () => {
+      const selected = { type: null, val: null };
+      const inject = () => {
+        if (document.getElementById('ui-final-polish')) return;
+        const style = document.createElement('style');
+        style.id = 'ui-final-polish';
+        style.textContent = `
+          .line{padding:4px!important;background:transparent!important;box-shadow:none!important;border-left-color:transparent!important;border-right-color:transparent!important;border-top-color:transparent!important;grid-template-columns:minmax(0,1fr)!important;}
+          .line:hover{background:transparent!important;box-shadow:none!important;border-left-color:transparent!important;border-right-color:transparent!important;border-top-color:transparent!important;border-bottom-color:var(--hair)!important;}
+          .lineMain,.clusterLine{padding:6px 7px!important;border:1px solid transparent!important;border-radius:11px!important;background:transparent!important;transition:background .14s ease,border-color .14s ease,box-shadow .14s ease;}
+          .line:hover .lineMain,.clusterLine:hover{border-color:color-mix(in srgb,var(--blue) 30%,var(--line))!important;background:rgba(255,255,255,.16)!important;box-shadow:0 8px 22px rgba(36,92,255,.045)!important;}
+          .authorCluster{padding:4px!important;}
+          .clusterHead{padding:0 7px!important;}
+          .clusterHead[hidden]{display:none!important;}
+          .clusterClaims{margin-left:0!important;padding-left:0!important;border-left:0!important;gap:4px!important;}
+          .clusterHead[hidden]+.clusterClaims{margin-top:0!important;}
+          .line[data-selected="true"] .lineMain,.clusterLine[data-selected="true"]{border-color:color-mix(in srgb,var(--blue) 44%,var(--line))!important;background:color-mix(in srgb,var(--blue) 8%,transparent)!important;box-shadow:0 8px 24px rgba(36,92,255,.08)!important;}
+          .author[data-selected="true"],.clusterAuthor[data-selected="true"]{text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:.08em;color:var(--ink)!important;}
+          .mono[data-selected="true"],.domain[data-selected="true"],.question[data-selected="true"],.counts[data-selected="true"],.line[data-selected="true"] .counts,.clusterLine[data-selected="true"] .counts{border-color:color-mix(in srgb,var(--blue) 38%,var(--line))!important;background:color-mix(in srgb,var(--blue) 10%,transparent)!important;color:var(--ink)!important;box-shadow:0 6px 18px rgba(36,92,255,.06)!important;}
+          .row[data-selected="true"],.chip[data-selected="true"]{border-color:color-mix(in srgb,var(--blue) 42%,var(--line))!important;background:color-mix(in srgb,var(--blue) 10%,transparent)!important;}
+        `;
+        document.head.appendChild(style);
+      };
+      const cssEscape = value => (window.CSS && CSS.escape) ? CSS.escape(String(value)) : String(value).replace(/"/g, '\\"');
+      const clearSelected = () => document.querySelectorAll('[data-selected="true"]').forEach(el => el.removeAttribute('data-selected'));
+      const mark = () => {
+        clearSelected();
+        if (!selected.type || selected.val == null) return;
+        const val = cssEscape(selected.val);
+        const map = {
+          statement: `[data-act="inspectStatement"][data-val="${val}"]`,
+          person: `[data-act="inspectPerson"][data-val="${val}"],[data-act="filter"][data-kind="person"][data-val="${val}"]`,
+          concept: `[data-act="inspectConcept"][data-val="${val}"],[data-act="filter"][data-kind="concept"][data-val="${val}"]`,
+          question: `[data-act="inspectQuestion"][data-val="${val}"],[data-act="filter"][data-kind="question"][data-val="${val}"]`,
+          domain: `[data-act="inspectDomain"][data-val="${val}"],[data-act="filter"][data-kind="domain"][data-val="${val}"]`
+        };
+        document.querySelectorAll(map[selected.type] || '').forEach(el => el.setAttribute('data-selected', 'true'));
+      };
+      const normalize = () => {
         document.querySelectorAll('.authorCluster .clusterHead .date').forEach(el => {
           const clean = el.textContent.split('·')[0].trim();
           if (el.textContent !== clean) el.textContent = clean;
         });
+        document.querySelectorAll('.group').forEach(group => {
+          const groupName = group.querySelector(':scope > .groupHead b')?.textContent.trim();
+          const groupMeta = group.querySelector(':scope > .groupHead .count');
+          if (groupMeta) {
+            const clean = groupMeta.textContent.split('·')[0].trim();
+            if (groupMeta.textContent !== clean) groupMeta.textContent = clean;
+          }
+          group.querySelectorAll(':scope > .authorCluster').forEach(cluster => {
+            const clusterName = cluster.querySelector(':scope > .clusterHead .clusterAuthor')?.textContent.trim();
+            const clusterHead = cluster.querySelector(':scope > .clusterHead');
+            if (clusterHead && groupName && clusterName === groupName) clusterHead.hidden = true;
+          });
+        });
+        mark();
+      };
+      const remember = event => {
+        const el = event.target.closest('[data-act]');
+        if (!el) return;
+        const { act, kind, val } = el.dataset;
+        const direct = { inspectStatement: 'statement', inspectPerson: 'person', inspectConcept: 'concept', inspectQuestion: 'question', inspectDomain: 'domain' };
+        if (direct[act]) {
+          selected.type = direct[act];
+          selected.val = val;
+          setTimeout(normalize, 0);
+          return;
+        }
+        if (act === 'filter' && ['person', 'concept', 'question', 'domain'].includes(kind)) {
+          selected.type = kind;
+          selected.val = val;
+          setTimeout(normalize, 0);
+        }
       };
       const start = () => {
+        inject();
+        document.addEventListener('click', remember, true);
         const content = document.getElementById('content');
-        if (!content) return;
-        cleanClusterCounts();
-        new MutationObserver(cleanClusterCounts).observe(content, { childList: true, subtree: true });
+        const rail = document.getElementById('rail');
+        if (content) new MutationObserver(normalize).observe(content, { childList: true, subtree: true });
+        if (rail) new MutationObserver(normalize).observe(rail, { childList: true, subtree: true });
+        normalize();
       };
       document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', start) : start();
     })();
