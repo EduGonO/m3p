@@ -57,7 +57,16 @@ function injectPolishCSS(){
     .expanded{grid-column:1!important;margin:7px 0 0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;}
     .counts{appearance:none;border:1px solid transparent;background:transparent;border-radius:999px;padding:2px 5px;display:inline-flex;gap:5px;align-items:center;font:10px/1 var(--mono);transition:background .14s ease,border-color .14s ease,box-shadow .14s ease;}
     .counts:hover,.counts[aria-expanded=true]{border-color:color-mix(in srgb,var(--blue) 28%,var(--line));background:rgba(255,255,255,.20);box-shadow:0 6px 18px rgba(36,92,255,.06);}
-    .author:hover{background:transparent!important;border-color:transparent!important;box-shadow:none!important;text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:.08em;}
+    .author:hover,.clusterAuthor:hover{background:transparent!important;border-color:transparent!important;box-shadow:none!important;text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:.08em;}
+    .authorCluster{border-bottom:1px solid var(--hair);padding:9px 10px;}
+    .authorCluster:last-child{border-bottom:0;}
+    .clusterHead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:baseline;margin-bottom:6px;}
+    .clusterAuthor{appearance:none;justify-self:start;max-width:100%;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;text-align:left;font-weight:720;font-size:12.5px;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .clusterClaims{display:grid;gap:4px;margin-left:4px;padding-left:11px;border-left:1px solid var(--hair);}
+    .clusterLine{display:block;width:100%;padding:6px 7px;border:1px solid transparent;border-radius:11px;background:transparent;text-align:left;transition:background .14s ease,border-color .14s ease,box-shadow .14s ease;}
+    .clusterLine:hover{border-color:color-mix(in srgb,var(--blue) 30%,var(--line));background:rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(36,92,255,.045);}
+    .clusterLine .claimText{font-size:13px;line-height:1.36;}
+    .clusterLine .meta{margin-top:5px;}
   `;
   document.head.appendChild(style);
 }
@@ -160,12 +169,28 @@ function row(label,n,kind,val){ const active=(kind==='person'&&S.person===Number
 function viewAtlas(st){ return `<div class="graph"><svg id="graph"></svg></div>${outline(groupByPeriod(st.slice(0,120)))}`; }
 function viewRead(st){ if(S.person) return authorView(DB.peopleById[S.person], st); return outline(groupForRead(st)); }
 function viewPressure(st){ const ranked=[...st].sort((a,b)=>score(b)-score(a)||sortChrono(a,b)).slice(0,160); return outline([{title:'±', meta:`${ranked.length}`, items:ranked}], {variant:'pressure'}); }
-function viewRoutes(){ const r=DB.routes.find(x=>x.id===S.route)||DB.routes[0]; const st=r.ids.map(id=>DB.byId[id]).filter(matchesActive).sort(sortChrono); const groups=CHAPTERS.map(ch=>({title:ch.label, meta:`${ch.hint} · ${st.filter(ch.test).length}`, items:st.filter(ch.test)})).filter(g=>g.items.length); return `<div class="hero"><div class="tabs">${DB.routes.map(x=>`<button class="chip ${x.id===r.id?'active':''}" data-act="route" data-val="${x.id}">${esc(x.icon)} ${esc(x.title)}</button>`).join('')}</div><p style="margin-top:8px">${esc(r.arc)} · ${st.length}</p></div><div class="chapters">${groups.map(g=>`<section class="chapter"><div class="chapterTitle"><b>${esc(g.title)}</b><span>${esc(g.meta)}</span></div>${g.items.slice(0,18).map(s=>claimLine(s,{variant:'route'})).join('')}</section>`).join('')}</div>`; }
+function viewRoutes(){ const r=DB.routes.find(x=>x.id===S.route)||DB.routes[0]; const st=r.ids.map(id=>DB.byId[id]).filter(matchesActive).sort(sortChrono); const groups=CHAPTERS.map(ch=>({title:ch.label, meta:`${ch.hint} · ${st.filter(ch.test).length}`, items:st.filter(ch.test)})).filter(g=>g.items.length); return `<div class="hero"><div class="tabs">${DB.routes.map(x=>`<button class="chip ${x.id===r.id?'active':''}" data-act="route" data-val="${x.id}">${esc(x.icon)} ${esc(x.title)}</button>`).join('')}</div><p style="margin-top:8px">${esc(r.arc)} · ${st.length}</p></div><div class="chapters">${groups.map(g=>`<section class="chapter"><div class="chapterTitle"><b>${esc(g.title)}</b><span>${esc(g.meta)}</span></div>${renderRuns(g.items.slice(0,18), {variant:'route'})}</section>`).join('')}</div>`; }
 function authorView(p, st){ const groups = count(st.flatMap(s=>s.domains)).map(([d])=>({title:CAT_LABEL[d]||pretty(d), meta:d, items:st.filter(s=>s.domains.includes(d))})); return `<div class="hero"><div class="heroTop"><h2>${esc(p.name)}</h2><span class="date">${esc(p.time)}</span></div><p>${esc(p.movement)} · ${st.length} claims · ${count(st.flatMap(s=>s.concepts)).slice(0,4).map(([x])=>pretty(x)).join(' · ')}</p></div>${outline(groups)}`; }
 function groupForRead(st){ if(S.concept||S.question||S.domain) return groupByAuthor(st); return groupByPeriod(st); }
 function groupByAuthor(st){ return Object.values(st.reduce((a,s)=>((a[s.person]||=[]).push(s),a),{})).sort((a,b)=>sortChrono(a[0],b[0])).map(g=>({title:g[0].person, meta:`${g[0].time} · ${g.length}`, items:g})); }
 function groupByPeriod(st){ return CHAPTERS.map(ch=>({title:ch.label, meta:`${ch.hint}`, items:st.filter(ch.test)})).filter(g=>g.items.length); }
-function outline(groups, opts={}){ return `<div class="outline">${groups.map(g=>`<section class="group"><div class="groupHead"><b>${esc(g.title)}</b><span class="count">${esc(g.meta)}</span></div>${g.items.map(s=>claimLine(s,opts)).join('')}</section>`).join('') || empty('No postulates match.')}</div>`; }
+function outline(groups, opts={}){ return `<div class="outline">${groups.map(g=>`<section class="group"><div class="groupHead"><b>${esc(g.title)}</b><span class="count">${esc(g.meta)}</span></div>${renderRuns(g.items, opts)}</section>`).join('') || empty('No postulates match.')}</div>`; }
+function renderRuns(items, opts={}){
+  const runs=[];
+  for(const s of items){
+    const last=runs[runs.length-1];
+    if(last && last[0].personId===s.personId) last.push(s); else runs.push([s]);
+  }
+  return runs.map(run => run.length>1 ? authorCluster(run, opts) : claimLine(run[0], opts)).join('');
+}
+function authorCluster(run, opts={}){
+  const first=run[0];
+  return `<section class="authorCluster"><div class="clusterHead"><button class="clusterAuthor" data-act="inspectPerson" data-val="${first.personId}">${esc(first.person)}</button><span class="date">${esc(first.time)} · ${run.length}</span></div><div class="clusterClaims">${run.map(s=>clusterLine(s, opts)).join('')}</div></section>`;
+}
+function clusterLine(s, opts={}){
+  const expanded=S.expanded.has(s.id);
+  return `<article class="clusterLine" data-act="inspectStatement" data-val="${s.id}"><div class="claimText">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${opts.variant==='pressure'?`<span class="mono">${score(s)} links</span>`:''}</div>${expanded?expandedBlock(s):''}</article>`;
+}
 function claimLine(s, opts={}){ const expanded=S.expanded.has(s.id); return `<article class="line" data-act="inspectStatement" data-val="${s.id}"><div class="lineMain"><div class="lineTop"><button class="author" data-act="inspectPerson" data-val="${s.personId}">${esc(s.person)}</button><span class="date">${esc(s.time)}</span></div><div class="claimText">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${opts.variant==='pressure'?`<span class="mono">${score(s)} links</span>`:''}</div>${expanded?expandedBlock(s):''}</div></article>`; }
 function expandedBlock(s){ const links=rels(s.id).slice(0,12); return `<div class="expanded"><div class="relList">${links.map(r=>relation(r,s.id)).join('') || '<p>no links</p>'}</div></div>`; }
 function semanticLine(s){ const expanded=S.expanded.has(s.id); const ds=s.domains.slice(0,1).map(d=>domain(d,true)).join(''); const cs=s.concepts.slice(0,3).map(c=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join(''); return `${ds}${cs}<button class="counts" data-act="expand" data-val="${s.id}" aria-expanded="${expanded}" title="${expanded?'Collapse links':'Expand links'}"><span class="plus">+${supportCount(s.id)}</span><span class="minus">−${challengeCount(s.id)}</span></button>`; }
