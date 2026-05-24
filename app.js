@@ -43,9 +43,23 @@ let S = {
 boot();
 
 async function boot(){
+  injectPolishCSS();
   $('#q').addEventListener('input', e => { S.q = e.target.value.trim(); render(); });
   document.addEventListener('click', handleClick);
   try { setDB(buildDB(await loadJSON())); } catch(e) { $('#content').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function injectPolishCSS(){
+  if(document.getElementById('claim-polish-css')) return;
+  const style = document.createElement('style');
+  style.id = 'claim-polish-css';
+  style.textContent = `
+    .line{grid-template-columns:minmax(0,1fr)!important;}
+    .expanded{grid-column:1!important;margin:7px 0 0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;}
+    .counts{appearance:none;border:1px solid transparent;background:transparent;border-radius:999px;padding:2px 5px;display:inline-flex;gap:5px;align-items:center;font:10px/1 var(--mono);transition:background .14s ease,border-color .14s ease,box-shadow .14s ease;}
+    .counts:hover,.counts[aria-expanded=true]{border-color:color-mix(in srgb,var(--blue) 28%,var(--line));background:rgba(255,255,255,.20);box-shadow:0 6px 18px rgba(36,92,255,.06);}
+    .author:hover{background:transparent!important;border-color:transparent!important;box-shadow:none!important;text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:.08em;}
+  `;
+  document.head.appendChild(style);
 }
 async function loadJSON(){
   let err;
@@ -152,9 +166,9 @@ function groupForRead(st){ if(S.concept||S.question||S.domain) return groupByAut
 function groupByAuthor(st){ return Object.values(st.reduce((a,s)=>((a[s.person]||=[]).push(s),a),{})).sort((a,b)=>sortChrono(a[0],b[0])).map(g=>({title:g[0].person, meta:`${g[0].time} · ${g.length}`, items:g})); }
 function groupByPeriod(st){ return CHAPTERS.map(ch=>({title:ch.label, meta:`${ch.hint}`, items:st.filter(ch.test)})).filter(g=>g.items.length); }
 function outline(groups, opts={}){ return `<div class="outline">${groups.map(g=>`<section class="group"><div class="groupHead"><b>${esc(g.title)}</b><span class="count">${esc(g.meta)}</span></div>${g.items.map(s=>claimLine(s,opts)).join('')}</section>`).join('') || empty('No postulates match.')}</div>`; }
-function claimLine(s, opts={}){ const expanded=S.expanded.has(s.id); return `<article class="line" data-act="inspectStatement" data-val="${s.id}"><button class="bullet" data-act="expand" data-val="${s.id}" aria-expanded="${expanded}" title="${expanded?'Collapse':'Expand'}">${expanded?'−':'+'}</button><div class="lineMain"><div class="lineTop"><button class="author inspectable" data-act="inspectPerson" data-val="${s.personId}">${esc(s.person)}</button><span class="date">${esc(s.time)} ${relBadgeText(s)}</span></div><div class="claimText">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${opts.variant==='pressure'?`<span class="mono">${score(s)} links</span>`:''}</div>${expanded?expandedBlock(s):''}</div></article>`; }
+function claimLine(s, opts={}){ const expanded=S.expanded.has(s.id); return `<article class="line" data-act="inspectStatement" data-val="${s.id}"><div class="lineMain"><div class="lineTop"><button class="author" data-act="inspectPerson" data-val="${s.personId}">${esc(s.person)}</button><span class="date">${esc(s.time)}</span></div><div class="claimText">${esc(s.text)}</div><div class="meta">${semanticLine(s)}${opts.variant==='pressure'?`<span class="mono">${score(s)} links</span>`:''}</div>${expanded?expandedBlock(s):''}</div></article>`; }
 function expandedBlock(s){ const links=rels(s.id).slice(0,12); return `<div class="expanded"><div class="relList">${links.map(r=>relation(r,s.id)).join('') || '<p>no links</p>'}</div></div>`; }
-function semanticLine(s){ const ds=s.domains.slice(0,1).map(d=>domain(d,true)).join(''); const cs=s.concepts.slice(0,3).map(c=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join(''); return `${ds}${cs}<span class="counts"><span class="plus">+${supportCount(s.id)}</span><span class="minus">−${challengeCount(s.id)}</span></span>`; }
+function semanticLine(s){ const expanded=S.expanded.has(s.id); const ds=s.domains.slice(0,1).map(d=>domain(d,true)).join(''); const cs=s.concepts.slice(0,3).map(c=>`<button class="mono inspectable" data-act="inspectConcept" data-val="${esc(c)}">${esc(pretty(c))}</button>`).join(''); return `${ds}${cs}<button class="counts" data-act="expand" data-val="${s.id}" aria-expanded="${expanded}" title="${expanded?'Collapse links':'Expand links'}"><span class="plus">+${supportCount(s.id)}</span><span class="minus">−${challengeCount(s.id)}</span></button>`; }
 function relBadgeText(s){ return `+${supportCount(s.id)} −${challengeCount(s.id)}`; }
 function relation(r,focus){ const o=DB.byId[r.source===focus?r.target:r.source]; return `<button class="rel ${r.type}" data-act="inspectStatement" data-val="${o.id}"><span class="mark">${r.type==='support'?'+':'−'}</span><span><b>${esc(o.person)}</b> — ${esc(o.text)}</span></button>`; }
 function domain(d,click=false){ return `<${click?'button':'span'} class="domain inspectable" ${click?`data-act="inspectDomain" data-val="${esc(d)}"`:''}><i style="background:${CAT_COLOR[d]||'var(--muted)'}"></i>${esc(CAT_LABEL[d]||pretty(d))}</${click?'button':'span'}>`; }
