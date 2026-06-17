@@ -12,10 +12,14 @@ const STATE = {
   velocities: {},      // [vx, vy] velocities for physics
   selectedIdx: -1,
   hoverIdx: -1,
+  hoverLink: null,     // {idxA, idxB, sim}
   isProcessing: false,
   canvas: null,
   ctx: null,
-  similarities: {}     // Cosine similarities between concepts
+  similarities: {},    // Cosine similarities between concepts
+  offset: { x: 0, y: 0 },
+  isDragging: false,
+  lastMousePos: { x: 0, y: 0 }
 };
 
 // ============================================================================
@@ -54,7 +58,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   
   // Canvas interactions
-  STATE.canvas.addEventListener('mousemove', handleCanvasMouseMove);
+  STATE.canvas.addEventListener('mousedown', handleMouseDown);
+  window.addEventListener('mousemove', handleMouseMove);
+  window.addEventListener('mouseup', handleMouseUp);
   STATE.canvas.addEventListener('click', handleCanvasClick);
   
   // Run continuous animation loop
@@ -91,7 +97,6 @@ async function handleFileUpload(file) {
     setProgressBar(30);
     updateStatus('analyse sémantique...');
     
-    // Step 1: Process text using GPT to extract concepts & summary
     const result = await processText(text);
     if (!result.concepts || result.concepts.length === 0) {
       throw new Error('échec de l\'extraction');
@@ -108,12 +113,11 @@ async function handleFileUpload(file) {
     STATE.similarities = {};
     STATE.selectedIdx = -1;
     STATE.hoverIdx = -1;
+    STATE.offset = { x: 0, y: 0 };
     
-    // Update UI with summary and list
     displaySummary();
     renderNotionsList();
     
-    // Step 2: Fetch embeddings
     updateStatus('génération de la constellation...');
     await loadEmbeddings();
     
@@ -198,15 +202,9 @@ async function processText(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text })
     });
-    
-    if (!response.ok) {
-      throw new Error(`http ${response.status}`);
-    }
-    
+    if (!response.ok) throw new Error(`http ${response.status}`);
     return await response.json();
-  } catch (err) {
-    throw err;
-  }
+  } catch (err) { throw err; }
 }
 
 async function getEmbedding(text) {
@@ -216,11 +214,7 @@ async function getEmbedding(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text })
     });
-    
-    if (!response.ok) {
-      throw new Error(`http ${response.status}`);
-    }
-    
+    if (!response.ok) throw new Error(`http ${response.status}`);
     const data = await response.json();
     return data.embedding;
   } catch (err) {
@@ -232,19 +226,15 @@ function generateFallbackEmbedding(text) {
   const words = text.toLowerCase().split(/\s+/);
   const dim = 1536;  
   const embedding = new Array(dim).fill(0);
-  
   words.forEach((word, idx) => {
     let hash = 0;
     for (let i = 0; i < word.length; i++) {
-      const char = word.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;  
+      hash = ((hash << 5) - hash) + word.charCodeAt(i);
+      hash = hash & hash;
     }
-    
     const pos = Math.abs(hash) % dim;
     embedding[pos] += (Math.sin(hash / 1000) + Math.cos(idx)) / 2;
   });
-  
   const norm = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0));
   return embedding.map(v => norm > 0 ? v / norm : 0);
 }
@@ -257,23 +247,19 @@ async function loadEmbeddings() {
   const wrapper = document.querySelector('.canvas-wrapper');
   const w = wrapper.clientWidth;
   const h = wrapper.clientHeight;
-  
   const baseProgress = 50;
   const step = 50 / STATE.concepts.length;
 
   for (let i = 0; i < STATE.concepts.length; i++) {
     const concept = STATE.concepts[i];
     updateStatus(`liaison sémantique: ${concept.title}`);
-    
     const vector = await getEmbedding(`${concept.title}: ${concept.description}`);
     STATE.embeddings[i] = vector;
-    
     STATE.coordinates[i] = [
       w / 2 + (Math.random() - 0.5) * 60,
       h / 2 + (Math.random() - 0.5) * 60
     ];
     STATE.velocities[i] = [0, 0];
-    
     computeSimilaritiesForNode(i);
     renderNotionsList();
     setProgressBar(baseProgress + (i + 1) * step);
@@ -329,7 +315,6 @@ function updatePhysics() {
   
   loadedIndices.forEach(i => { forcesX[i] = 0; forcesY[i] = 0; });
   
-  // 1. Repulsive forces
   for (let i = 0; i < n; i++) {
     const idxA = loadedIndices[i];
     for (let j = i + 1; j < n; j++) {
@@ -345,7 +330,6 @@ function updatePhysics() {
     }
   }
   
-  // 2. Semantic Attraction (Similarities)
   for (let i = 0; i < n; i++) {
     const idxA = loadedIndices[i];
     for (let j = i + 1; j < n; j++) {
@@ -364,15 +348,24 @@ function updatePhysics() {
     }
   }
   
-  // 3. Center gravity
+  const centerGravity = 0.04;
+  const maxCenterDist = Math.min(w, h) * 0.45;
+
   loadedIndices.forEach(idx => {
     const dx = w / 2 - STATE.coordinates[idx][0];
     const dy = h / 2 - STATE.coordinates[idx][1];
-    forcesX[idx] += dx * 0.01;
-    forcesY[idx] += dy * 0.01;
+    const distFromCenter = Math.hypot(dx, dy);
+    
+    forcesX[idx] += dx * centerGravity;
+    forcesY[idx] += dy * centerGravity;
+
+    if (distFromCenter > maxCenterDist) {
+      const pull = (distFromCenter - maxCenterDist) * 0.1;
+      forcesX[idx] += (dx / distFromCenter) * pull;
+      forcesY[idx] += (dy / distFromCenter) * pull;
+    }
   });
   
-  // Apply physics
   const damping = 0.75;
   loadedIndices.forEach(idx => {
     STATE.velocities[idx][0] = (STATE.velocities[idx][0] + forcesX[idx] * 0.1) * damping;
@@ -389,25 +382,38 @@ function updatePhysics() {
 function draw() {
   const canvas = STATE.canvas;
   const ctx = STATE.ctx;
-  const w = canvas.width / (window.devicePixelRatio || 1);
-  const h = canvas.height / (window.devicePixelRatio || 1);
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.width / dpr;
+  const h = canvas.height / dpr;
+  
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  ctx.translate(STATE.offset.x, STATE.offset.y);
   
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillRect(-STATE.offset.x, -STATE.offset.y, w, h);
   drawGrid(ctx, w, h);
   
   const loadedIndices = Object.keys(STATE.coordinates).map(Number);
   if (loadedIndices.length === 0) {
+    ctx.restore();
+    ctx.save();
+    ctx.scale(dpr, dpr);
     ctx.fillStyle = '#86868b';
     ctx.font = '12px -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('déposer un texte pour cartographier le paysage conceptuel', w / 2, h / 2);
+    ctx.restore();
     return;
   }
   
+  // Link hover detection logic in draw loop to avoid separate spatial index
+  let linkToHover = null;
+  const mouseWorldX = STATE.lastMousePos.x - STATE.offset.x;
+  const mouseWorldY = STATE.lastMousePos.y - STATE.offset.y;
+
   // 1. Draw Semantic links (Constellation)
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)';
-  ctx.lineWidth = 1;
   for (let i = 0; i < loadedIndices.length; i++) {
     const idxA = loadedIndices[i];
     for (let j = i + 1; j < loadedIndices.length; j++) {
@@ -416,6 +422,13 @@ function draw() {
       if (sim > 0.55) {
         const [x1, y1] = STATE.coordinates[idxA];
         const [x2, y2] = STATE.coordinates[idxB];
+        
+        const distToLine = getPointToSegmentDistance(mouseWorldX, mouseWorldY, x1, y1, x2, y2);
+        const isHovered = distToLine < 5;
+        if (isHovered) linkToHover = { idxA, idxB, sim };
+
+        ctx.strokeStyle = isHovered ? 'rgba(29, 29, 31, 0.4)' : 'rgba(0, 0, 0, 0.04)';
+        ctx.lineWidth = isHovered ? 2 : 1;
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
@@ -423,8 +436,9 @@ function draw() {
       }
     }
   }
+  STATE.hoverLink = linkToHover;
 
-  // 2. Draw Narrative Trajectory (Subtle sequential line)
+  // 2. Draw Narrative Trajectory
   ctx.strokeStyle = 'rgba(210, 210, 215, 0.4)';
   ctx.lineWidth = 0.8;
   for (let i = 0; i < loadedIndices.length - 1; i++) {
@@ -445,34 +459,40 @@ function draw() {
     const isSelected = idx === STATE.selectedIdx;
     const concept = STATE.concepts[idx];
     const weight = concept.weight || 5;
-    
     const baseRadius = 3 + (weight / 3);
     const radius = isSelected ? baseRadius + 2 : isHover ? baseRadius + 3 : baseRadius;
     
     ctx.fillStyle = isSelected ? '#1d1d1f' : isHover ? '#424245' : '#d2d2d7';
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    
+    ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
     if (isHover || isSelected) {
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(x, y, radius + 4, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(x, y, radius + 4, 0, Math.PI * 2); ctx.stroke();
     }
   });
+
+  ctx.restore();
+  updateTooltip();
+}
+
+function getPointToSegmentDistance(px, py, x1, y1, x2, y2) {
+  const l2 = (x1 - x2) ** 2 + (y1 - y2) ** 2;
+  if (l2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
 }
 
 function drawGrid(ctx, w, h) {
   ctx.strokeStyle = '#f5f5f7';
   ctx.lineWidth = 1;
   const size = 80;
-  for (let x = 0; x < w; x += size) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  const startX = Math.floor(-STATE.offset.x / size) * size;
+  const startY = Math.floor(-STATE.offset.y / size) * size;
+  for (let x = startX; x < startX + w + size; x += size) {
+    ctx.beginPath(); ctx.moveTo(x, -STATE.offset.y); ctx.lineTo(x, -STATE.offset.y + h); ctx.stroke();
   }
-  for (let y = 0; y < h; y += size) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  for (let y = startY; y < startY + h + size; y += size) {
+    ctx.beginPath(); ctx.moveTo(-STATE.offset.x, y); ctx.lineTo(-STATE.offset.x + w, y); ctx.stroke();
   }
 }
 
@@ -483,30 +503,74 @@ function resizeCanvas() {
   STATE.canvas.width = wrapper.clientWidth * dpr;
   STATE.canvas.height = wrapper.clientHeight * dpr;
   STATE.ctx.setTransform(1, 0, 0, 1, 0, 0);
-  STATE.ctx.scale(dpr, dpr);
 }
 
 // ============================================================================
 // INTERACTIONS & UI UPDATES
 // ============================================================================
 
-function handleCanvasMouseMove(e) {
+function handleMouseDown(e) {
   const rect = STATE.canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
+  
+  const mouseWorldX = x - STATE.offset.x;
+  const mouseWorldY = y - STATE.offset.y;
+  
   const loadedIndices = Object.keys(STATE.coordinates).map(Number);
-  let nearestIdx = -1, minDist = 24;  
+  let onNode = false;
   loadedIndices.forEach(idx => {
-    const dist = Math.hypot(STATE.coordinates[idx][0] - x, STATE.coordinates[idx][1] - y);
-    if (dist < minDist) { minDist = dist; nearestIdx = idx; }
+    const dist = Math.hypot(STATE.coordinates[idx][0] - mouseWorldX, STATE.coordinates[idx][1] - mouseWorldY);
+    if (dist < 24) onNode = true;
   });
-  STATE.hoverIdx = nearestIdx;
+
+  if (!onNode) {
+    STATE.isDragging = true;
+    STATE.lastMousePos = { x, y };
+  }
+}
+
+function handleMouseMove(e) {
+  const rect = STATE.canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if (STATE.isDragging) {
+    STATE.offset.x += x - STATE.lastMousePos.x;
+    STATE.offset.y += y - STATE.lastMousePos.y;
+    STATE.lastMousePos = { x, y };
+  } else {
+    STATE.lastMousePos = { x, y };
+    const mouseWorldX = x - STATE.offset.x;
+    const mouseWorldY = y - STATE.offset.y;
+    const loadedIndices = Object.keys(STATE.coordinates).map(Number);
+    let nearestIdx = -1, minDist = 24;  
+    loadedIndices.forEach(idx => {
+      const dist = Math.hypot(STATE.coordinates[idx][0] - mouseWorldX, STATE.coordinates[idx][1] - mouseWorldY);
+      if (dist < minDist) { minDist = dist; nearestIdx = idx; }
+    });
+    STATE.hoverIdx = nearestIdx;
+  }
+}
+
+function handleMouseUp() {
+  STATE.isDragging = false;
+}
+
+function updateTooltip() {
   const tooltip = document.getElementById('tooltip');
-  if (nearestIdx >= 0) {
-    const concept = STATE.concepts[nearestIdx];
+  if (STATE.hoverIdx >= 0) {
+    const concept = STATE.concepts[STATE.hoverIdx];
     tooltip.innerHTML = `<h3>${concept.title}</h3><p>${concept.description}</p>${concept.context ? `<div class="context">« ${concept.context} »</div>` : ''}`;
-    tooltip.style.left = (e.clientX - rect.left + 16) + 'px';
-    tooltip.style.top = (e.clientY - rect.top + 16) + 'px';
+    tooltip.style.left = (STATE.lastMousePos.x + 16) + 'px';
+    tooltip.style.top = (STATE.lastMousePos.y + 16) + 'px';
+    tooltip.classList.add('visible');
+  } else if (STATE.hoverLink) {
+    const conceptA = STATE.concepts[STATE.hoverLink.idxA];
+    const conceptB = STATE.concepts[STATE.hoverLink.idxB];
+    tooltip.innerHTML = `<h3>relation sémantique</h3><p>proximité sémantique entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${Math.round(STATE.hoverLink.sim * 100)}%</p>`;
+    tooltip.style.left = (STATE.lastMousePos.x + 16) + 'px';
+    tooltip.style.top = (STATE.lastMousePos.y + 16) + 'px';
     tooltip.classList.add('visible');
   } else {
     tooltip.classList.remove('visible');
@@ -539,8 +603,14 @@ function renderNotionsList() {
     if (!isLoaded) return `<div class="notion-item loading" data-idx="${idx}">${concept.title} (calcul...)</div>`;
     return `
       <div class="notion-item ${isSelected ? 'active' : ''}" data-idx="${idx}">
-        ${concept.title}
-        <span class="notion-weight">${concept.weight}/10</span>
+        <div class="notion-header">
+          ${concept.title}
+          <span class="notion-weight">${concept.weight}/10</span>
+        </div>
+        <div class="notion-details">
+          <p>${concept.description}</p>
+          <div class="citation-block">« ${concept.context} »</div>
+        </div>
       </div>
     `;
   }).join('');
