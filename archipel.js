@@ -18,8 +18,10 @@ const STATE = {
   ctx: null,
   similarities: {},    // Cosine similarities between concepts
   offset: { x: 0, y: 0 },
+  targetOffset: { x: 0, y: 0 }, // For smooth panning
   isDragging: false,
-  lastMousePos: { x: 0, y: 0 }
+  lastMousePos: { x: 0, y: 0 },
+  progressInterval: null
 };
 
 // ============================================================================
@@ -74,11 +76,16 @@ document.addEventListener('DOMContentLoaded', () => {
 async function handleFileUpload(file) {
   if (!file) return;
   
-  STATE.isProcessing = true;
+  // Immediate UI update
   showUploadProgress(file.name);
-  setProgressBar(10);
+  setProgressBar(5);
+  
+  STATE.isProcessing = true;
   updateStatus('extraction du texte...');
   
+  // Start smooth simulated progress
+  startSimulatedProgress(5, 45, 5000); 
+
   try {
     let text = '';
     
@@ -94,15 +101,13 @@ async function handleFileUpload(file) {
       throw new Error('aucun texte extrait');
     }
     
-    setProgressBar(30);
     updateStatus('analyse sémantique...');
-    
+    startSimulatedProgress(45, 80, 15000); // Slower for API call
+
     const result = await processText(text);
     if (!result.concepts || result.concepts.length === 0) {
       throw new Error('échec de l\'extraction');
     }
-    
-    setProgressBar(50);
     
     // Clear previous state
     STATE.concepts = result.concepts;
@@ -114,14 +119,17 @@ async function handleFileUpload(file) {
     STATE.selectedIdx = -1;
     STATE.hoverIdx = -1;
     STATE.offset = { x: 0, y: 0 };
+    STATE.targetOffset = { x: 0, y: 0 };
     
     displaySummary();
     renderNotionsList();
     
     updateStatus('génération de la constellation...');
-    await loadEmbeddings();
+    // Tie the last 20% to real embedding progress
+    await loadEmbeddings(80);
     
     setProgressBar(100);
+    stopSimulatedProgress();
     setTimeout(() => hideUploadProgress(), 1000);
     
     updateStatus('paysage de pensée prêt');
@@ -129,9 +137,25 @@ async function handleFileUpload(file) {
   } catch (err) {
     console.error(err);
     updateStatus(`erreur: ${err.message.toLowerCase()}`);
+    stopSimulatedProgress();
     setProgressBar(0);
     STATE.isProcessing = false;
   }
+}
+
+function startSimulatedProgress(start, end, duration) {
+  stopSimulatedProgress();
+  const startTime = Date.now();
+  STATE.progressInterval = setInterval(() => {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(end, start + (elapsed / duration) * (end - start));
+    setProgressBar(progress);
+    if (progress >= end) clearInterval(STATE.progressInterval);
+  }, 50);
+}
+
+function stopSimulatedProgress() {
+  if (STATE.progressInterval) clearInterval(STATE.progressInterval);
 }
 
 function showUploadProgress(filename) {
@@ -243,12 +267,11 @@ function generateFallbackEmbedding(text) {
 // SEQUENTIAL EMBEDDING LOADER
 // ============================================================================
 
-async function loadEmbeddings() {
+async function loadEmbeddings(startPercent) {
   const wrapper = document.querySelector('.canvas-wrapper');
   const w = wrapper.clientWidth;
   const h = wrapper.clientHeight;
-  const baseProgress = 50;
-  const step = 50 / STATE.concepts.length;
+  const step = (100 - startPercent) / STATE.concepts.length;
 
   for (let i = 0; i < STATE.concepts.length; i++) {
     const concept = STATE.concepts[i];
@@ -256,13 +279,13 @@ async function loadEmbeddings() {
     const vector = await getEmbedding(`${concept.title}: ${concept.description}`);
     STATE.embeddings[i] = vector;
     STATE.coordinates[i] = [
-      w / 2 + (Math.random() - 0.5) * 60,
-      h / 2 + (Math.random() - 0.5) * 60
+      w / 2 + (Math.random() - 0.5) * 40,
+      h / 2 + (Math.random() - 0.5) * 40
     ];
     STATE.velocities[i] = [0, 0];
     computeSimilaritiesForNode(i);
     renderNotionsList();
-    setProgressBar(baseProgress + (i + 1) * step);
+    setProgressBar(startPercent + (i + 1) * step);
   }
 }
 
@@ -296,8 +319,31 @@ function computeSimilaritiesForNode(nodeIdx) {
 
 function animationLoop() {
   updatePhysics();
+  updatePanning();
   draw();
   requestAnimationFrame(animationLoop);
+}
+
+function updatePanning() {
+  // Smoothly interpolate offset towards targetOffset
+  const lerp = 0.08;
+  STATE.offset.x += (STATE.targetOffset.x - STATE.offset.x) * lerp;
+  STATE.offset.y += (STATE.targetOffset.y - STATE.offset.y) * lerp;
+}
+
+function centerNode(idx) {
+  if (!STATE.coordinates[idx]) return;
+  const canvas = STATE.canvas;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.width / dpr;
+  const h = canvas.height / dpr;
+  
+  const [nodeX, nodeY] = STATE.coordinates[idx];
+  
+  // We want node position + current offset to be (w/2, h/2)
+  // targetOffset = center - nodePos
+  STATE.targetOffset.x = w / 2 - nodeX;
+  STATE.targetOffset.y = h / 2 - nodeY;
 }
 
 function updatePhysics() {
@@ -309,7 +355,7 @@ function updatePhysics() {
   const w = wrapper.clientWidth;
   const h = wrapper.clientHeight;
   
-  const k = 150; 
+  const k = 110; // Reduced distance for more compact layout
   const forcesX = {};
   const forcesY = {};
   
@@ -322,9 +368,9 @@ function updatePhysics() {
       const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
       const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
       const dist = Math.hypot(dx, dy) || 1;
-      const force = (k * k) / dist;
-      const fx = (dx / dist) * force * 0.15;
-      const fy = (dy / dist) * force * 0.15;
+      const force = (k * k) / dist; // Reduced repulsion constant logic
+      const fx = (dx / dist) * force * 0.12;
+      const fy = (dy / dist) * force * 0.12;
       forcesX[idxA] -= fx; forcesY[idxA] -= fy;
       forcesX[idxB] += fx; forcesY[idxB] += fy;
     }
@@ -339,8 +385,8 @@ function updatePhysics() {
       const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
       const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
       const dist = Math.hypot(dx, dy) || 1;
-      const targetDist = k * (1.2 - sim);
-      const force = (dist - targetDist) * (sim * 0.15);
+      const targetDist = k * (1.1 - sim); // Tighter spring
+      const force = (dist - targetDist) * (sim * 0.2);
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
       forcesX[idxA] += fx; forcesY[idxA] += fy;
@@ -348,8 +394,8 @@ function updatePhysics() {
     }
   }
   
-  const centerGravity = 0.04;
-  const maxCenterDist = Math.min(w, h) * 0.45;
+  const centerGravity = 0.05;
+  const maxCenterDist = Math.min(w, h) * 0.4;
 
   loadedIndices.forEach(idx => {
     const dx = w / 2 - STATE.coordinates[idx][0];
@@ -360,13 +406,13 @@ function updatePhysics() {
     forcesY[idx] += dy * centerGravity;
 
     if (distFromCenter > maxCenterDist) {
-      const pull = (distFromCenter - maxCenterDist) * 0.1;
+      const pull = (distFromCenter - maxCenterDist) * 0.15;
       forcesX[idx] += (dx / distFromCenter) * pull;
       forcesY[idx] += (dy / distFromCenter) * pull;
     }
   });
   
-  const damping = 0.75;
+  const damping = 0.72;
   loadedIndices.forEach(idx => {
     STATE.velocities[idx][0] = (STATE.velocities[idx][0] + forcesX[idx] * 0.1) * damping;
     STATE.velocities[idx][1] = (STATE.velocities[idx][1] + forcesY[idx] * 0.1) * damping;
@@ -408,12 +454,10 @@ function draw() {
     return;
   }
   
-  // Link hover detection logic in draw loop to avoid separate spatial index
   let linkToHover = null;
   const mouseWorldX = STATE.lastMousePos.x - STATE.offset.x;
   const mouseWorldY = STATE.lastMousePos.y - STATE.offset.y;
 
-  // 1. Draw Semantic links (Constellation)
   for (let i = 0; i < loadedIndices.length; i++) {
     const idxA = loadedIndices[i];
     for (let j = i + 1; j < loadedIndices.length; j++) {
@@ -422,23 +466,17 @@ function draw() {
       if (sim > 0.55) {
         const [x1, y1] = STATE.coordinates[idxA];
         const [x2, y2] = STATE.coordinates[idxB];
-        
         const distToLine = getPointToSegmentDistance(mouseWorldX, mouseWorldY, x1, y1, x2, y2);
         const isHovered = distToLine < 5;
         if (isHovered) linkToHover = { idxA, idxB, sim };
-
         ctx.strokeStyle = isHovered ? 'rgba(29, 29, 31, 0.4)' : 'rgba(0, 0, 0, 0.04)';
         ctx.lineWidth = isHovered ? 2 : 1;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
       }
     }
   }
   STATE.hoverLink = linkToHover;
 
-  // 2. Draw Narrative Trajectory
   ctx.strokeStyle = 'rgba(210, 210, 215, 0.4)';
   ctx.lineWidth = 0.8;
   for (let i = 0; i < loadedIndices.length - 1; i++) {
@@ -446,13 +484,9 @@ function draw() {
     const idxB = loadedIndices[i + 1];
     const [x1, y1] = STATE.coordinates[idxA];
     const [x2, y2] = STATE.coordinates[idxB];
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   }
 
-  // 3. Draw Nodes
   loadedIndices.forEach(idx => {
     const [x, y] = STATE.coordinates[idx];
     const isHover = idx === STATE.hoverIdx;
@@ -461,7 +495,6 @@ function draw() {
     const weight = concept.weight || 5;
     const baseRadius = 3 + (weight / 3);
     const radius = isSelected ? baseRadius + 2 : isHover ? baseRadius + 3 : baseRadius;
-    
     ctx.fillStyle = isSelected ? '#1d1d1f' : isHover ? '#424245' : '#d2d2d7';
     ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
     if (isHover || isSelected) {
@@ -513,17 +546,14 @@ function handleMouseDown(e) {
   const rect = STATE.canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  
   const mouseWorldX = x - STATE.offset.x;
   const mouseWorldY = y - STATE.offset.y;
-  
   const loadedIndices = Object.keys(STATE.coordinates).map(Number);
   let onNode = false;
   loadedIndices.forEach(idx => {
     const dist = Math.hypot(STATE.coordinates[idx][0] - mouseWorldX, STATE.coordinates[idx][1] - mouseWorldY);
     if (dist < 24) onNode = true;
   });
-
   if (!onNode) {
     STATE.isDragging = true;
     STATE.lastMousePos = { x, y };
@@ -534,10 +564,11 @@ function handleMouseMove(e) {
   const rect = STATE.canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-
   if (STATE.isDragging) {
     STATE.offset.x += x - STATE.lastMousePos.x;
     STATE.offset.y += y - STATE.lastMousePos.y;
+    STATE.targetOffset.x = STATE.offset.x;
+    STATE.targetOffset.y = STATE.offset.y;
     STATE.lastMousePos = { x, y };
   } else {
     STATE.lastMousePos = { x, y };
@@ -582,6 +613,7 @@ function handleCanvasClick(e) {
     STATE.selectedIdx = STATE.selectedIdx === STATE.hoverIdx ? -1 : STATE.hoverIdx;
     renderNotionsList();
     if (STATE.selectedIdx >= 0) {
+      centerNode(STATE.selectedIdx);
       const activeEl = document.querySelector(`.notion-item[data-idx="${STATE.selectedIdx}"]`);
       if (activeEl) activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -619,6 +651,7 @@ function renderNotionsList() {
       const idx = Number(el.dataset.idx);
       STATE.selectedIdx = STATE.selectedIdx === idx ? -1 : idx;
       renderNotionsList();
+      if (STATE.selectedIdx >= 0) centerNode(STATE.selectedIdx);
     });
   });
 }
