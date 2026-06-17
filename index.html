@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>L'Archipel Sémantique — Constellation d'Idées</title>
+  <title>paysage de pensée</title>
   <style>
     * {
       margin: 0;
@@ -27,41 +27,54 @@
     }
     
     .sidebar {
-      width: 300px;
-      background: #f5f5f7;
-      border-right: 1px solid #d2d2d7;
-      padding: 32px 24px;
+      width: 320px;
+      background: #ffffff;
+      border-right: 1px solid #e5e5e7;
+      padding: 40px 24px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 32px;
     }
     
-    .sidebar h1 {
-      font-size: 19px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .header h1 {
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
       color: #1d1d1f;
+      text-transform: lowercase;
+    }
+    
+    .header p {
+      font-size: 12px;
+      color: #86868b;
+      text-transform: lowercase;
     }
     
     .upload-zone {
-      border: 1px solid #d2d2d7;
-      background: #ffffff;
-      border-radius: 12px;
-      padding: 24px;
+      border: 1px dashed #d2d2d7;
+      background: #fafafa;
+      border-radius: 8px;
+      padding: 32px 16px;
       text-align: center;
       cursor: pointer;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
     
     .upload-zone:hover {
       border-color: #86868b;
-      transform: translateY(-1px);
+      background: #f5f5f7;
     }
     
     .upload-zone.dragover {
-      border-color: #0066cc;
-      background: rgba(0, 102, 204, 0.05);
+      border-color: #1d1d1f;
+      background: #f5f5f7;
     }
     
     .upload-zone input {
@@ -69,72 +82,60 @@
     }
     
     .upload-zone p {
-      font-size: 14px;
-      color: #86868b;
-      cursor: pointer;
-      font-weight: 400;
-    }
-    
-    .info-panel {
-      border-top: 1px solid #d2d2d7;
-      padding-top: 16px;
-      font-size: 13px;
-    }
-    
-    .info-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-    
-    .info-label {
-      color: #86868b;
-    }
-    
-    .info-value {
-      color: #1d1d1f;
-      font-weight: 500;
-    }
-    
-    .chunks-list {
-      margin-top: 8px;
-    }
-    
-    .chunks-list-title {
       font-size: 11px;
+      color: #86868b;
+      text-transform: lowercase;
+      line-height: 1.6;
+    }
+    
+    .notions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      flex: 1;
+    }
+    
+    .notions-title {
+      font-size: 10px;
       font-weight: 600;
       color: #86868b;
-      margin-bottom: 12px;
-      text-transform: uppercase;
+      text-transform: lowercase;
       letter-spacing: 0.05em;
     }
     
-    .chunk-item {
-      padding: 10px 12px;
-      margin-bottom: 8px;
-      background: #ffffff;
-      border: 1px solid #d2d2d7;
-      border-radius: 8px;
+    .notions-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .notion-item {
+      padding: 12px;
+      border: 1px solid #e5e5e7;
+      border-radius: 6px;
       font-size: 12px;
       color: #1d1d1f;
       cursor: pointer;
       transition: all 0.2s ease;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      text-transform: lowercase;
+      background: #ffffff;
     }
     
-    .chunk-item:hover {
+    .notion-item:hover {
       border-color: #86868b;
-      background: #fafafa;
     }
     
-    .chunk-item.active {
+    .notion-item.active {
       border-color: #1d1d1f;
-      background: #1d1d1f;
-      color: #ffffff;
+      background: #fafafa;
       font-weight: 500;
+    }
+    
+    .notion-item.loading {
+      color: #86868b;
+      border-style: dashed;
+      background: #fafafa;
+      cursor: default;
     }
     
     .canvas-wrapper {
@@ -150,108 +151,81 @@
       height: 100%;
     }
     
-    .status-bar {
+    .status-indicator {
       position: absolute;
       bottom: 24px;
-      right: 24px;
-      background: rgba(255, 255, 255, 0.8);
-      border: 1px solid #d2d2d7;
-      border-radius: 20px;
-      padding: 8px 16px;
-      font-size: 12px;
+      left: 24px;
+      font-size: 11px;
       color: #86868b;
-      backdrop-filter: saturate(180%) blur(20px);
-      transition: all 0.3s ease;
-    }
-    
-    .status-bar.processing {
-      color: #0066cc;
-    }
-    
-    .status-bar.error {
-      color: #e30000;
-    }
-    
-    .status-bar.success {
-      color: #008000;
-      border-color: #008000;
+      text-transform: lowercase;
+      transition: opacity 0.3s ease;
     }
     
     .tooltip {
       position: absolute;
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid #d2d2d7;
-      border-radius: 12px;
+      background: #ffffff;
+      border: 1px solid #e5e5e7;
+      border-radius: 8px;
       padding: 16px;
-      font-size: 13px;
+      font-size: 12px;
       color: #1d1d1f;
-      max-width: 300px;
+      max-width: 320px;
       pointer-events: none;
       z-index: 100;
-      backdrop-filter: saturate(180%) blur(20px);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-      transition: opacity 0.2s ease;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      line-height: 1.6;
+    }
+    
+    .tooltip h3 {
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      text-transform: lowercase;
+    }
+    
+    .tooltip p {
+      color: #86868b;
+      text-transform: lowercase;
+    }
+    
+    .tooltip .context {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #f5f5f7;
+      font-style: italic;
+      color: #86868b;
     }
     
     .tooltip.visible {
       opacity: 1;
-    }
-    
-    .tooltip.hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
-    
-    @media (max-width: 768px) {
-      .container {
-        flex-direction: column;
-      }
-      
-      .sidebar {
-        width: 100%;
-        height: auto;
-        max-height: 250px;
-        border-right: none;
-        border-bottom: 1px solid #d2d2d7;
-      }
     }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="sidebar">
-      <h1>L'Archipel Sémantique</h1>
+      <div class="header">
+        <h1>paysage de pensée</h1>
+        <p>cartographie conceptuelle de dissertation et de mémoire</p>
+      </div>
       
       <div class="upload-zone" id="uploadZone">
         <input type="file" id="fileInput" accept=".pdf,.txt,.md" />
-        <p>Drop file here or click to browse<br/>(PDF, TXT, Markdown)</p>
+        <p>déposer un fichier ou cliquer pour parcourir<br/>(pdf, txt, markdown)</p>
       </div>
       
-      <div class="info-panel">
-        <div class="info-item">
-          <span class="info-label">Chunks</span>
-          <span class="info-value" id="chunkCount">0</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Embeddings</span>
-          <span class="info-value" id="embeddingCount">0</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Status</span>
-          <span class="info-value" id="statusLabel">Ready</span>
-        </div>
-      </div>
-      
-      <div class="chunks-list" id="chunksList" style="display: none;">
-        <div class="chunks-list-title">Fragments</div>
-        <div id="chunksContainer"></div>
+      <div class="notions-list" id="notionsList" style="display: none;">
+        <div class="notions-title">notions</div>
+        <div id="notionsContainer" class="notions-container"></div>
       </div>
     </div>
     
     <div class="canvas-wrapper">
       <canvas id="archipelCanvas"></canvas>
-      <div class="status-bar" id="statusBar">Ready</div>
-      <div class="tooltip hidden" id="tooltip"></div>
+      <div class="status-indicator" id="statusIndicator">prêt</div>
+      <div class="tooltip" id="tooltip"></div>
     </div>
   </div>
 
