@@ -12,10 +12,11 @@
     }
     
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
-      background: #0a0a0a;
-      color: #e0e0e0;
-      line-height: 1.6;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      background: #ffffff;
+      color: #1d1d1f;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
       overflow: hidden;
     }
     
@@ -26,42 +27,41 @@
     }
     
     .sidebar {
-      width: 320px;
-      background: #111;
-      border-right: 1px solid #222;
-      padding: 24px;
+      width: 300px;
+      background: #f5f5f7;
+      border-right: 1px solid #d2d2d7;
+      padding: 32px 24px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 24px;
     }
     
     .sidebar h1 {
-      font-size: 18px;
+      font-size: 19px;
       font-weight: 600;
-      background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      letter-spacing: -0.02em;
+      color: #1d1d1f;
     }
     
     .upload-zone {
-      border: 2px dashed #333;
-      border-radius: 8px;
-      padding: 16px;
+      border: 1px solid #d2d2d7;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 24px;
       text-align: center;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     
     .upload-zone:hover {
-      border-color: #666;
-      background: rgba(255, 255, 255, 0.02);
+      border-color: #86868b;
+      transform: translateY(-1px);
     }
     
     .upload-zone.dragover {
-      border-color: #8b5cf6;
-      background: rgba(139, 92, 246, 0.1);
+      border-color: #0066cc;
+      background: rgba(0, 102, 204, 0.05);
     }
     
     .upload-zone input {
@@ -69,17 +69,16 @@
     }
     
     .upload-zone p {
-      font-size: 13px;
-      color: #888;
+      font-size: 14px;
+      color: #86868b;
       cursor: pointer;
+      font-weight: 400;
     }
     
     .info-panel {
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid #222;
-      border-radius: 8px;
-      padding: 12px;
-      font-size: 12px;
+      border-top: 1px solid #d2d2d7;
+      padding-top: 16px;
+      font-size: 13px;
     }
     
     .info-item {
@@ -89,40 +88,36 @@
       margin-bottom: 8px;
     }
     
-    .info-item:last-child {
-      margin-bottom: 0;
-    }
-    
     .info-label {
-      color: #666;
+      color: #86868b;
     }
     
     .info-value {
-      color: #8b5cf6;
-      font-weight: 600;
+      color: #1d1d1f;
+      font-weight: 500;
     }
     
     .chunks-list {
-      border-top: 1px solid #222;
-      padding-top: 12px;
-      margin-top: 12px;
+      margin-top: 8px;
     }
     
     .chunks-list-title {
-      font-size: 12px;
-      color: #666;
-      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #86868b;
+      margin-bottom: 12px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.05em;
     }
     
     .chunk-item {
-      padding: 8px;
-      margin-bottom: 6px;
-      background: rgba(255, 255, 255, 0.02);
-      border-left: 2px solid transparent;
-      border-radius: 4px;
-      font-size: 11px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      background: #ffffff;
+      border: 1px solid #d2d2d7;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #1d1d1f;
       cursor: pointer;
       transition: all 0.2s ease;
       overflow: hidden;
@@ -131,20 +126,21 @@
     }
     
     .chunk-item:hover {
-      background: rgba(255, 255, 255, 0.04);
-      border-left-color: #8b5cf6;
+      border-color: #86868b;
+      background: #fafafa;
     }
     
     .chunk-item.active {
-      background: rgba(139, 92, 246, 0.2);
-      border-left-color: #8b5cf6;
-      color: #8b5cf6;
+      border-color: #1d1d1f;
+      background: #1d1d1f;
+      color: #ffffff;
+      font-weight: 500;
     }
     
     .canvas-wrapper {
       flex: 1;
       position: relative;
-      background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 100%);
+      background: #ffffff;
       overflow: hidden;
     }
     
@@ -156,41 +152,45 @@
     
     .status-bar {
       position: absolute;
-      bottom: 16px;
-      right: 16px;
-      background: rgba(10, 10, 10, 0.8);
-      border: 1px solid #333;
-      border-radius: 6px;
-      padding: 12px 16px;
+      bottom: 24px;
+      right: 24px;
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid #d2d2d7;
+      border-radius: 20px;
+      padding: 8px 16px;
       font-size: 12px;
-      color: #888;
-      backdrop-filter: blur(8px);
+      color: #86868b;
+      backdrop-filter: saturate(180%) blur(20px);
+      transition: all 0.3s ease;
     }
     
     .status-bar.processing {
-      color: #8b5cf6;
+      color: #0066cc;
     }
     
     .status-bar.error {
-      color: #ff6b6b;
+      color: #e30000;
     }
     
     .status-bar.success {
-      color: #51cf66;
+      color: #008000;
+      border-color: #008000;
     }
     
     .tooltip {
       position: absolute;
-      background: rgba(10, 10, 10, 0.95);
-      border: 1px solid #444;
-      border-radius: 6px;
-      padding: 12px;
-      font-size: 12px;
-      max-width: 280px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #d2d2d7;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 13px;
+      color: #1d1d1f;
+      max-width: 300px;
       pointer-events: none;
       z-index: 100;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      backdrop-filter: saturate(180%) blur(20px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+      transition: opacity 0.2s ease;
     }
     
     .tooltip.visible {
@@ -210,13 +210,9 @@
       .sidebar {
         width: 100%;
         height: auto;
-        max-height: 200px;
+        max-height: 250px;
         border-right: none;
-        border-bottom: 1px solid #222;
-      }
-      
-      .canvas-wrapper {
-        flex: 1;
+        border-bottom: 1px solid #d2d2d7;
       }
     }
   </style>
@@ -228,21 +224,21 @@
       
       <div class="upload-zone" id="uploadZone">
         <input type="file" id="fileInput" accept=".pdf,.txt,.md" />
-        <p>📄 Déposer un fichier<br/>(PDF, TXT, Markdown)</p>
+        <p>Drop file here or click to browse<br/>(PDF, TXT, Markdown)</p>
       </div>
       
       <div class="info-panel">
         <div class="info-item">
-          <span class="info-label">Chunks:</span>
+          <span class="info-label">Chunks</span>
           <span class="info-value" id="chunkCount">0</span>
         </div>
         <div class="info-item">
-          <span class="info-label">Embeddings:</span>
+          <span class="info-label">Embeddings</span>
           <span class="info-value" id="embeddingCount">0</span>
         </div>
         <div class="info-item">
-          <span class="info-label">Status:</span>
-          <span class="info-value" id="statusLabel">ready</span>
+          <span class="info-label">Status</span>
+          <span class="info-value" id="statusLabel">Ready</span>
         </div>
       </div>
       
