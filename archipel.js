@@ -5,18 +5,17 @@
 // ============================================================================
 
 const STATE = {
-  chunks: [],
-  embeddings: [],
-  coordinates: [],
-  selectedChunkIdx: -1,
-  hoverChunkIdx: -1,
+  concepts: [],        // Extracted concepts from /api/process
+  embeddings: {},      // Embedding vectors mapped by concept index
+  coordinates: {},     // [x, y] coordinates in the physics simulation
+  velocities: {},      // [vx, vy] velocities for physics
+  selectedIdx: -1,
+  hoverIdx: -1,
   isProcessing: false,
   canvas: null,
-  ctx: null
+  ctx: null,
+  similarities: {}     // Cosine similarities between concepts
 };
-
-// API endpoint — uses Vercel environment or falls back to browser-based local inference
-const API_BASE = '/api';
 
 // ============================================================================
 // INITIALIZATION
@@ -26,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
   STATE.canvas = document.getElementById('archipelCanvas');
   STATE.ctx = STATE.canvas.getContext('2d');
   
-  // Set canvas to window size
+  // Set canvas size
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
   
@@ -57,8 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
   STATE.canvas.addEventListener('mousemove', handleCanvasMouseMove);
   STATE.canvas.addEventListener('click', handleCanvasClick);
   
-  // Initial draw
-  draw();
+  // Run continuous animation loop
+  requestAnimationFrame(animationLoop);
 });
 
 // ============================================================================
@@ -68,8 +67,8 @@ document.addEventListener('DOMContentLoaded', () => {
 async function handleFileUpload(file) {
   if (!file) return;
   
-  updateStatus('processing', 'Extracting text...');
   STATE.isProcessing = true;
+  updateStatus('analyse sémantique du texte...');
   
   try {
     let text = '';
@@ -79,34 +78,40 @@ async function handleFileUpload(file) {
     } else if (file.name.endsWith('.md') || file.name.endsWith('.txt') || file.type === 'text/plain') {
       text = await extractTextFromFile(file);
     } else {
-      throw new Error('Unsupported file type. Use PDF, TXT, or Markdown.');
+      throw new Error('format de fichier non supporté (utiliser pdf, txt ou markdown)');
     }
     
     if (!text || text.trim().length === 0) {
-      throw new Error('No text extracted from file.');
+      throw new Error('aucun texte extrait du fichier');
     }
     
-    // Chunk the text
-    updateStatus('processing', 'Segmenting text...');
-    await chunkText(text);
+    // Step 1: Process text using GPT to extract high-quality concepts
+    const concepts = await processText(text);
+    if (!concepts || concepts.length === 0) {
+      throw new Error('impossible d\'extraire les concepts du texte');
+    }
     
-    // Get embeddings
-    updateStatus('processing', `Getting embeddings (${STATE.chunks.length} chunks)...`);
-    await getEmbeddings();
+    // Clear previous state
+    STATE.concepts = concepts;
+    STATE.embeddings = {};
+    STATE.coordinates = {};
+    STATE.velocities = {};
+    STATE.similarities = {};
+    STATE.selectedIdx = -1;
+    STATE.hoverIdx = -1;
     
-    // Reduce to 2D
-    updateStatus('processing', 'Reducing dimensions...');
-    reduceTo2D();
+    // Render initial list in sidebar (in loading state)
+    renderNotionsList();
     
-    // Render list and canvas
-    renderChunksList();
-    draw();
+    // Step 2: Fetch embeddings sequentially and animate them as they load
+    updateStatus('cartographie des concepts...');
+    await loadEmbeddings();
     
-    updateStatus('success', `Constellation ready (${STATE.chunks.length} nodes)`);
+    updateStatus('paysage de pensée prêt');
     STATE.isProcessing = false;
   } catch (err) {
     console.error(err);
-    updateStatus('error', err.message);
+    updateStatus(`erreur: ${err.message.toLowerCase()}`);
     STATE.isProcessing = false;
   }
 }
@@ -128,7 +133,7 @@ async function extractTextFromPDF(file) {
         reject(err);
       }
     };
-    reader.onerror = () => reject(new Error('Failed to read PDF'));
+    reader.onerror = () => reject(new Error('erreur lors de la lecture du pdf'));
     reader.readAsArrayBuffer(file);
   });
 }
@@ -137,76 +142,31 @@ async function extractTextFromFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => resolve(e.target.result);
-    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.onerror = () => reject(new Error('erreur lors de la lecture du fichier'));
     reader.readAsText(file);
   });
 }
 
 // ============================================================================
-// TEXT CHUNKING
+// BACKEND API CLIENTS
 // ============================================================================
 
-async function chunkText(text) {
-  const chunks = [];
-  const chunkSize = 800;
-  const chunkOverlap = 100;
-  
-  // Normalize whitespace
-  const normalizedText = text.replace(/\s+/g, ' ').trim();
-  
-  // Split into sentences using punctuation or line breaks
-  const sentences = normalizedText.match(/[^.!?]+[.!?]+(?:\s|$)|.{1,800}(?:\s|$)/g) || [];
-  
-  let currentChunk = "";
-  
-  for (let i = 0; i < sentences.length; i++) {
-    const sentence = sentences[i];
+async function processText(text) {
+  try {
+    const response = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
     
-    if ((currentChunk + sentence).length <= chunkSize) {
-      currentChunk += (currentChunk ? " " : "") + sentence;
-    } else {
-      if (currentChunk.trim().length > 0) {
-        chunks.push(currentChunk.trim());
-      }
-      
-      // Handle overlap by reaching back into the current chunk's tail
-      // and starting the next chunk with it
-      const overlapStart = Math.max(0, currentChunk.length - chunkOverlap);
-      currentChunk = currentChunk.substring(overlapStart).trim() + " " + sentence;
+    if (!response.ok) {
+      throw new Error(`http ${response.status}`);
     }
-  }
-  
-  if (currentChunk.trim().length > 0) {
-    chunks.push(currentChunk.trim());
-  }
-  
-  STATE.chunks = chunks.map((fullText, idx) => ({
-    id: idx,
-    text: fullText.substring(0, 100) + '...', // Summary for UI
-    fullText: fullText, // Full preserved text for embeddings
-    length: fullText.length
-  }));
-  
-  document.getElementById('chunkCount').textContent = STATE.chunks.length;
-}
-
-// ============================================================================
-// EMBEDDINGS & DIMENSIONALITY REDUCTION
-// ============================================================================
-
-async function getEmbeddings() {
-  STATE.embeddings = [];
-  
-  for (let i = 0; i < STATE.chunks.length; i++) {
-    try {
-      const embedding = await getEmbedding(STATE.chunks[i].fullText);
-      STATE.embeddings.push(embedding);
-      document.getElementById('embeddingCount').textContent = STATE.embeddings.length;
-    } catch (err) {
-      console.warn(`Failed to get embedding for chunk ${i}:`, err);
-      STATE.embeddings.push(generateFallbackEmbedding(STATE.chunks[i].fullText));
-      document.getElementById('embeddingCount').textContent = STATE.embeddings.length;
-    }
+    
+    const data = await response.json();
+    return data.concepts || [];
+  } catch (err) {
+    throw err;
   }
 }
 
@@ -219,15 +179,15 @@ async function getEmbedding(text) {
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(`http ${response.status}`);
     }
     
     const data = await response.json();
-    if (!data.embedding) throw new Error('No embedding in response');
+    if (!data.embedding) throw new Error('no embedding vector');
     
     return data.embedding;
   } catch (err) {
-    throw err;
+    return generateFallbackEmbedding(text);
   }
 }
 
@@ -252,110 +212,224 @@ function generateFallbackEmbedding(text) {
   return embedding.map(v => norm > 0 ? v / norm : 0);
 }
 
-function reduceTo2D() {
-  if (STATE.embeddings.length === 0) return;
+// ============================================================================
+// SEQUENTIAL EMBEDDING LOADER
+// ============================================================================
+
+async function loadEmbeddings() {
+  const wrapper = document.querySelector('.canvas-wrapper');
+  const w = wrapper.clientWidth;
+  const h = wrapper.clientHeight;
   
-  const dim = STATE.embeddings[0].length;
-  const n = STATE.embeddings.length;
-  
-  const mean = new Array(dim).fill(0);
-  STATE.embeddings.forEach(emb => {
-    emb.forEach((v, i) => mean[i] += v);
-  });
-  mean.forEach((_, i) => mean[i] /= n);
-  
-  const centered = STATE.embeddings.map(emb =>
-    emb.map((v, i) => v - mean[i])
-  );
-  
-  const v1 = new Array(dim).fill(0);
-  const v2 = new Array(dim).fill(0);
-  
-  for (let i = 0; i < dim; i++) {
-    v1[i] = Math.sin(i * 0.1);
-    v2[i] = Math.cos(i * 0.1 + 1.57);
+  for (let i = 0; i < STATE.concepts.length; i++) {
+    const concept = STATE.concepts[i];
+    
+    updateStatus(`calcul de la relation sémantique (${i + 1}/${STATE.concepts.length}): ${concept.title}`);
+    
+    const vector = await getEmbedding(`${concept.title}: ${concept.description}`);
+    STATE.embeddings[i] = vector;
+    
+    STATE.coordinates[i] = [
+      w / 2 + (Math.random() - 0.5) * 50,
+      h / 2 + (Math.random() - 0.5) * 50
+    ];
+    STATE.velocities[i] = [0, 0];
+    
+    computeSimilaritiesForNode(i);
+    renderNotionsList();
   }
-  
-  STATE.coordinates = centered.map(vec => [
-    vec.reduce((sum, v, i) => sum + v * v1[i], 0),
-    vec.reduce((sum, v, i) => sum + v * v2[i], 0)
-  ]);
-  
-  normalizeCoordinates();
 }
 
-function normalizeCoordinates() {
-  if (STATE.coordinates.length === 0) return;
+function cosineSimilarity(v1, v2) {
+  let dotProduct = 0;
+  let mA = 0;
+  let mB = 0;
+  for (let i = 0; i < v1.length; i++) {
+    dotProduct += v1[i] * v2[i];
+    mA += v1[i] * v1[i];
+    mB += v2[i] * v2[i];
+  }
+  return mA && mB ? dotProduct / (Math.sqrt(mA) * Math.sqrt(mB)) : 0;
+}
+
+function computeSimilaritiesForNode(nodeIdx) {
+  STATE.similarities[nodeIdx] = {};
   
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  
-  STATE.coordinates.forEach(([x, y]) => {
-    minX = Math.min(minX, x);
-    maxX = Math.max(maxX, x);
-    minY = Math.min(minY, y);
-    maxY = Math.max(maxY, y);
-  });
-  
-  const padding = 80;
-  const w = STATE.canvas.width - padding * 2;
-  const h = STATE.canvas.height - padding * 2;
-  
-  const rangeX = maxX - minX || 1;
-  const rangeY = maxY - minY || 1;
-  
-  STATE.coordinates = STATE.coordinates.map(([x, y]) => [
-    padding + ((x - minX) / rangeX) * w,
-    padding + ((y - minY) / rangeY) * h
-  ]);
+  for (let i = 0; i <= nodeIdx; i++) {
+    if (i === nodeIdx) {
+      STATE.similarities[nodeIdx][i] = 1;
+    } else if (STATE.embeddings[i] && STATE.embeddings[nodeIdx]) {
+      const sim = cosineSimilarity(STATE.embeddings[i], STATE.embeddings[nodeIdx]);
+      STATE.similarities[nodeIdx][i] = sim;
+      
+      if (!STATE.similarities[i]) STATE.similarities[i] = {};
+      STATE.similarities[i][nodeIdx] = sim;
+    }
+  }
 }
 
 // ============================================================================
-// CANVAS RENDERING
+// ANIMATION & PHYSICS SIMULATION
+// ============================================================================
+
+function animationLoop() {
+  updatePhysics();
+  draw();
+  requestAnimationFrame(animationLoop);
+}
+
+function updatePhysics() {
+  const loadedIndices = Object.keys(STATE.coordinates).map(Number);
+  const n = loadedIndices.length;
+  if (n === 0) return;
+  
+  const wrapper = document.querySelector('.canvas-wrapper');
+  const w = wrapper.clientWidth;
+  const h = wrapper.clientHeight;
+  
+  const k = 150; // Natural distance
+  const forcesX = {};
+  const forcesY = {};
+  
+  loadedIndices.forEach(i => {
+    forcesX[i] = 0;
+    forcesY[i] = 0;
+  });
+  
+  // 1. Repulsive forces between all loaded nodes
+  for (let i = 0; i < n; i++) {
+    const idxA = loadedIndices[i];
+    for (let j = i + 1; j < n; j++) {
+      const idxB = loadedIndices[j];
+      
+      const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
+      const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
+      const dist = Math.hypot(dx, dy) || 1;
+      
+      const force = (k * k) / dist;
+      const fx = (dx / dist) * force * 0.15;
+      const fy = (dy / dist) * force * 0.15;
+      
+      forcesX[idxA] -= fx;
+      forcesY[idxA] -= fy;
+      forcesX[idxB] += fx;
+      forcesY[idxB] += fy;
+    }
+  }
+  
+  // 2. Attractive forces based on cosine similarity
+  for (let i = 0; i < n; i++) {
+    const idxA = loadedIndices[i];
+    for (let j = i + 1; j < n; j++) {
+      const idxB = loadedIndices[j];
+      
+      const sim = STATE.similarities[idxA]?.[idxB] || 0;
+      if (sim <= 0) continue;
+      
+      const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
+      const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
+      const dist = Math.hypot(dx, dy) || 1;
+      
+      const targetDist = k * (1 - sim + 0.1);
+      const force = (dist - targetDist) * (sim + 0.1) * 0.12;
+      
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+      
+      forcesX[idxA] += fx;
+      forcesY[idxA] += fy;
+      forcesX[idxB] -= fx;
+      forcesY[idxB] -= fy;
+    }
+  }
+  
+  // 3. Weak attraction between consecutive nodes to maintain textual narrative flow
+  for (let i = 0; i < n - 1; i++) {
+    const idxA = loadedIndices[i];
+    const idxB = loadedIndices[i + 1];
+    
+    const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
+    const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
+    const dist = Math.hypot(dx, dy) || 1;
+    
+    const force = (dist - 120) * 0.05;
+    const fx = (dx / dist) * force;
+    const fy = (dy / dist) * force;
+    
+    forcesX[idxA] += fx;
+    forcesY[idxA] += fy;
+    forcesX[idxB] -= fx;
+    forcesY[idxB] -= fy;
+  }
+  
+  // 4. Center-gravity forces
+  loadedIndices.forEach(idx => {
+    const dx = w / 2 - STATE.coordinates[idx][0];
+    const dy = h / 2 - STATE.coordinates[idx][1];
+    forcesX[idx] += dx * 0.012;
+    forcesY[idx] += dy * 0.012;
+  });
+  
+  // Apply forces to update positions
+  const damping = 0.78;
+  loadedIndices.forEach(idx => {
+    STATE.velocities[idx][0] = (STATE.velocities[idx][0] + forcesX[idx] * 0.1) * damping;
+    STATE.velocities[idx][1] = (STATE.velocities[idx][1] + forcesY[idx] * 0.1) * damping;
+    
+    STATE.coordinates[idx][0] += STATE.velocities[idx][0];
+    STATE.coordinates[idx][1] += STATE.velocities[idx][1];
+  });
+}
+
+// ============================================================================
+// CANVAS DRAWING
 // ============================================================================
 
 function draw() {
   const canvas = STATE.canvas;
   const ctx = STATE.ctx;
-  const w = canvas.width;
-  const h = canvas.height;
+  const w = canvas.width / (window.devicePixelRatio || 1);
+  const h = canvas.height / (window.devicePixelRatio || 1);
   
   // Clear with light background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
   
-  // Draw subtle grid
+  // Grid
   drawGrid(ctx, w, h);
   
-  if (STATE.coordinates.length === 0) {
+  const loadedIndices = Object.keys(STATE.coordinates).map(Number);
+  if (loadedIndices.length === 0) {
     ctx.fillStyle = '#86868b';
-    ctx.font = '14px -apple-system, sans-serif';
+    ctx.font = '12px -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Upload a document to create the constellation', w / 2, h / 2);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('déposer un texte pour cartographier le paysage conceptuel', w / 2, h / 2);
     return;
   }
   
-  // Draw connections (trajectory)
-  drawConnections(ctx);
+  // Draw similarity links (very thin dashed lines)
+  drawSimilarityLinks(ctx, loadedIndices);
+  
+  // Draw consecutive flow trajectory (continuous thin line)
+  drawTrajectory(ctx, loadedIndices);
   
   // Draw nodes
-  drawNodes(ctx);
-  
-  requestAnimationFrame(draw);
+  drawNodes(ctx, loadedIndices);
 }
 
 function drawGrid(ctx, w, h) {
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.03)';
+  ctx.strokeStyle = '#f5f5f7';
   ctx.lineWidth = 1;
   
-  const gridSize = 100;
-  for (let x = 0; x < w; x += gridSize) {
+  const size = 80;
+  for (let x = 0; x < w; x += size) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, h);
     ctx.stroke();
   }
-  
-  for (let y = 0; y < h; y += gridSize) {
+  for (let y = 0; y < h; y += size) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(w, y);
@@ -363,44 +437,69 @@ function drawGrid(ctx, w, h) {
   }
 }
 
-function drawConnections(ctx) {
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
+function drawSimilarityLinks(ctx, indices) {
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)';
   ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
   
-  for (let i = 0; i < STATE.coordinates.length - 1; i++) {
-    const [x1, y1] = STATE.coordinates[i];
-    const [x2, y2] = STATE.coordinates[i + 1];
+  for (let i = 0; i < indices.length; i++) {
+    const idxA = indices[i];
+    for (let j = i + 1; j < indices.length; j++) {
+      const idxB = indices[j];
+      const sim = STATE.similarities[idxA]?.[idxB] || 0;
+      
+      if (sim > 0.45 && Math.abs(idxA - idxB) > 1) {
+        const [x1, y1] = STATE.coordinates[idxA];
+        const [x2, y2] = STATE.coordinates[idxB];
+        
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.setLineDash([]);
+}
+
+function drawTrajectory(ctx, indices) {
+  ctx.strokeStyle = '#d2d2d7';
+  ctx.lineWidth = 1.2;
+  
+  for (let i = 0; i < indices.length - 1; i++) {
+    const idxA = indices[i];
+    const idxB = indices[i + 1];
     
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
+    if (STATE.coordinates[idxA] && STATE.coordinates[idxB]) {
+      const [x1, y1] = STATE.coordinates[idxA];
+      const [x2, y2] = STATE.coordinates[idxB];
+      
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
   }
 }
 
-function drawNodes(ctx) {
-  STATE.coordinates.forEach((coord, idx) => {
-    const [x, y] = coord;
-    const isHover = idx === STATE.hoverChunkIdx;
-    const isSelected = idx === STATE.selectedChunkIdx;
+function drawNodes(ctx, indices) {
+  indices.forEach(idx => {
+    const [x, y] = STATE.coordinates[idx];
+    const isHover = idx === STATE.hoverIdx;
+    const isSelected = idx === STATE.selectedIdx;
     
-    // Monochromatic Apple aesthetic for nodes
-    const baseColor = isSelected ? '#1d1d1f' : isHover ? '#515154' : '#86868b';
+    const radius = isSelected ? 6 : isHover ? 7 : 4.5;
     
-    const radius = isHover ? 8 : isSelected ? 7 : 4;
-    
-    // Core dot
-    ctx.fillStyle = baseColor;
+    ctx.fillStyle = isSelected ? '#1d1d1f' : isHover ? '#424245' : '#86868b';
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
     
-    // Highlight ring
     if (isHover || isSelected) {
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.strokeStyle = isSelected ? 'rgba(0, 0, 0, 0.12)' : 'rgba(0, 0, 0, 0.06)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(x, y, radius + 4, 0, Math.PI * 2);
+      ctx.arc(x, y, radius + 5, 0, Math.PI * 2);
       ctx.stroke();
     }
   });
@@ -414,15 +513,12 @@ function resizeCanvas() {
   STATE.canvas.width = wrapper.clientWidth * dpr;
   STATE.canvas.height = wrapper.clientHeight * dpr;
   
+  STATE.ctx.setTransform(1, 0, 0, 1, 0, 0);
   STATE.ctx.scale(dpr, dpr);
-  
-  if (STATE.coordinates.length > 0) {
-    normalizeCoordinates();
-  }
 }
 
 // ============================================================================
-// INTERACTIONS
+// INTERACTIONS & UI UPDATES
 // ============================================================================
 
 function handleCanvasMouseMove(e) {
@@ -430,88 +526,91 @@ function handleCanvasMouseMove(e) {
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
   
-  let nearest = -1;
-  let minDist = 20;  
+  const loadedIndices = Object.keys(STATE.coordinates).map(Number);
+  let nearestIdx = -1;
+  let minDist = 24;  
   
-  STATE.coordinates.forEach((coord, idx) => {
-    const dist = Math.hypot(coord[0] - x, coord[1] - y);
+  loadedIndices.forEach(idx => {
+    const dist = Math.hypot(STATE.coordinates[idx][0] - x, STATE.coordinates[idx][1] - y);
     if (dist < minDist) {
       minDist = dist;
-      nearest = idx;
+      nearestIdx = idx;
     }
   });
   
-  STATE.hoverChunkIdx = nearest;
+  STATE.hoverIdx = nearestIdx;
   
   const tooltip = document.getElementById('tooltip');
-  if (nearest >= 0) {
-    const chunk = STATE.chunks[nearest];
-    tooltip.textContent = chunk.fullText.substring(0, 200);
-    tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
-    tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
-    tooltip.classList.remove('hidden');
+  if (nearestIdx >= 0) {
+    const concept = STATE.concepts[nearestIdx];
+    
+    tooltip.innerHTML = `
+      <h3>${concept.title}</h3>
+      <p>${concept.description}</p>
+      ${concept.context ? `<div class="context">« ${concept.context} »</div>` : ''}
+    `;
+    
+    tooltip.style.left = (e.clientX - rect.left + 16) + 'px';
+    tooltip.style.top = (e.clientY - rect.top + 16) + 'px';
     tooltip.classList.add('visible');
   } else {
-    tooltip.classList.add('hidden');
     tooltip.classList.remove('visible');
   }
 }
 
 function handleCanvasClick(e) {
-  if (STATE.hoverChunkIdx >= 0) {
-    STATE.selectedChunkIdx = STATE.selectedChunkIdx === STATE.hoverChunkIdx ? -1 : STATE.hoverChunkIdx;
-    renderChunksList();
+  if (STATE.hoverIdx >= 0) {
+    STATE.selectedIdx = STATE.selectedIdx === STATE.hoverIdx ? -1 : STATE.hoverIdx;
+    renderNotionsList();
+    
+    if (STATE.selectedIdx >= 0) {
+      const activeEl = document.querySelector(`.notion-item[data-idx="${STATE.selectedIdx}"]`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
   }
 }
 
-// ============================================================================
-// UI UPDATES
-// ============================================================================
-
-function updateStatus(type, message) {
-  const statusBar = document.getElementById('statusBar');
-  const statusLabel = document.getElementById('statusLabel');
-  
-  statusBar.textContent = message;
-  statusBar.className = 'status-bar';
-  
-  if (type === 'processing') {
-    statusBar.classList.add('processing');
-    statusLabel.textContent = 'processing...';
-  } else if (type === 'error') {
-    statusBar.classList.add('error');
-    statusLabel.textContent = 'error';
-  } else if (type === 'success') {
-    statusBar.classList.add('success');
-    statusLabel.textContent = 'ready';
-    setTimeout(() => {
-      statusBar.className = 'status-bar';
-      statusBar.textContent = 'Ready';
-    }, 3000);
-  }
+function updateStatus(message) {
+  const indicator = document.getElementById('statusIndicator');
+  indicator.textContent = message;
 }
 
-function renderChunksList() {
-  const list = document.getElementById('chunksList');
-  const container = document.getElementById('chunksContainer');
+function renderNotionsList() {
+  const list = document.getElementById('notionsList');
+  const container = document.getElementById('notionsContainer');
   
-  if (STATE.chunks.length === 0) {
+  if (STATE.concepts.length === 0) {
     list.style.display = 'none';
     return;
   }
   
-  list.style.display = 'block';
-  container.innerHTML = STATE.chunks.map((chunk, idx) => `
-    <div class="chunk-item ${idx === STATE.selectedChunkIdx ? 'active' : ''}" data-idx="${idx}">
-      ${chunk.fullText.substring(0, 60)}...
-    </div>
-  `).join('');
+  list.style.display = 'flex';
+  container.innerHTML = STATE.concepts.map((concept, idx) => {
+    const isLoaded = STATE.embeddings[idx] !== undefined;
+    const isSelected = idx === STATE.selectedIdx;
+    
+    if (!isLoaded) {
+      return `
+        <div class="notion-item loading" data-idx="${idx}">
+          ${concept.title} (calcul...)
+        </div>
+      `;
+    }
+    
+    return `
+      <div class="notion-item ${isSelected ? 'active' : ''}" data-idx="${idx}">
+        ${concept.title}
+      </div>
+    `;
+  }).join('');
   
-  container.querySelectorAll('.chunk-item').forEach(el => {
+  container.querySelectorAll('.notion-item:not(.loading)').forEach(el => {
     el.addEventListener('click', () => {
       const idx = Number(el.dataset.idx);
-      STATE.selectedChunkIdx = STATE.selectedChunkIdx === idx ? -1 : idx;
-      renderChunksList();
+      STATE.selectedIdx = STATE.selectedIdx === idx ? -1 : idx;
+      renderNotionsList();
     });
   });
 }
