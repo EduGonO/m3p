@@ -26,23 +26,19 @@ export default async function handler(req, res) {
         messages: [
           {
             role: 'system',
-            content: `You are a rigorous, precise philosophical assistant. Your task is to analyze the text and extract the 10-15 most significant concepts, notions, images, or philosophical ideas.
-Return a valid JSON object with a single key "concepts" containing an array of objects.
-Each object must have:
-- "title": A concise, precise title of the concept (2-4 words, strictly lowercase, e.g. "l'apeiron algorithmique").
-- "description": A highly rigorous, precise explanation of this concept's meaning and philosophical weight within the text (1-2 sentences).
-- "context": A short verbatim snippet from the text showcasing this concept in action.
+            content: `You are a rigorous, precise philosophical assistant. Your task is to analyze the text and:
+1. Provide a concise, high-level summary of the document (3-4 sentences, in the document's original language).
+2. Extract the 10-15 most significant concepts, notions, images, or philosophical ideas.
 
-Example output:
-{
-  "concepts": [
-    {
-      "title": "grammatisation de la mémoire",
-      "description": "Le passage d'un flux temporel de la parole vivante à sa discrétisation et spatialisation spatio-temporelle sous forme d'écriture.",
-      "context": "la mémoire se matérialise dans des supports techniques..."
-    }
-  ]
-}`
+Return a valid JSON object with:
+- "summary": The document summary.
+- "concepts": An array of objects.
+
+Each concept object must have:
+- "title": A concise title (2-4 words, strictly lowercase).
+- "description": A highly rigorous explanation (1-2 sentences).
+- "context": A short verbatim snippet from the text.
+- "weight": A number between 1 and 10 representing the relative importance or presence of this concept in the text.`
           },
           {
             role: 'user',
