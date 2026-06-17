@@ -65,6 +65,11 @@
       text-align: center;
       cursor: pointer;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      min-height: 110px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     
     .upload-zone:hover {
@@ -81,13 +86,66 @@
       display: none;
     }
     
-    .upload-zone p {
+    .upload-zone .content {
       font-size: 11px;
       color: #86868b;
       text-transform: lowercase;
       line-height: 1.6;
     }
+
+    .upload-info {
+      display: none;
+      width: 100%;
+      text-align: left;
+    }
+
+    .upload-info .filename {
+      font-size: 12px;
+      font-weight: 500;
+      color: #1d1d1f;
+      margin-bottom: 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-transform: lowercase;
+    }
+
+    .progress-container {
+      width: 100%;
+      height: 4px;
+      background: #e5e5e7;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: #1d1d1f;
+      transition: width 0.3s ease;
+    }
     
+    .doc-summary {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .doc-summary-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: #86868b;
+      text-transform: lowercase;
+      letter-spacing: 0.05em;
+    }
+
+    .doc-summary-text {
+      font-size: 12px;
+      color: #1d1d1f;
+      text-transform: lowercase;
+      line-height: 1.6;
+    }
+
     .notions-list {
       display: flex;
       flex-direction: column;
@@ -119,6 +177,9 @@
       transition: all 0.2s ease;
       text-transform: lowercase;
       background: #ffffff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     
     .notion-item:hover {
@@ -136,6 +197,12 @@
       border-style: dashed;
       background: #fafafa;
       cursor: default;
+    }
+
+    .notion-weight {
+      font-size: 9px;
+      color: #86868b;
+      font-weight: 400;
     }
     
     .canvas-wrapper {
@@ -213,7 +280,20 @@
       
       <div class="upload-zone" id="uploadZone">
         <input type="file" id="fileInput" accept=".pdf,.txt,.md" />
-        <p>déposer un fichier ou cliquer pour parcourir<br/>(pdf, txt, markdown)</p>
+        <div class="content" id="uploadContent">
+          <p>déposer un fichier ou cliquer pour parcourir<br/>(pdf, txt, markdown)</p>
+        </div>
+        <div class="upload-info" id="uploadInfo">
+          <div class="filename" id="filenameDisplay">document.pdf</div>
+          <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="doc-summary" id="docSummary">
+        <div class="doc-summary-title">résumé</div>
+        <div class="doc-summary-text" id="summaryText"></div>
       </div>
       
       <div class="notions-list" id="notionsList" style="display: none;">
