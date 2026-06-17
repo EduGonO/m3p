@@ -147,17 +147,44 @@ async function extractTextFromFile(file) {
 // ============================================================================
 
 async function chunkText(text) {
-  // Split by paragraphs (double newline or more)
-  const paragraphs = text
-    .split(/\n\s*\n+/)
-    .map(p => p.trim())
-    .filter(p => p.length > 20);  // Minimum meaningful length
+  const chunks = [];
+  const chunkSize = 800;
+  const chunkOverlap = 100;
   
-  STATE.chunks = paragraphs.map((text, idx) => ({
+  // Normalize whitespace
+  const normalizedText = text.replace(/\s+/g, ' ').trim();
+  
+  // Split into sentences using punctuation or line breaks
+  const sentences = normalizedText.match(/[^.!?]+[.!?]+(?:\s|$)|.{1,800}(?:\s|$)/g) || [];
+  
+  let currentChunk = "";
+  
+  for (let i = 0; i < sentences.length; i++) {
+    const sentence = sentences[i];
+    
+    if ((currentChunk + sentence).length <= chunkSize) {
+      currentChunk += (currentChunk ? " " : "") + sentence;
+    } else {
+      if (currentChunk.trim().length > 0) {
+        chunks.push(currentChunk.trim());
+      }
+      
+      // Handle overlap by reaching back into the current chunk's tail
+      // and starting the next chunk with it
+      const overlapStart = Math.max(0, currentChunk.length - chunkOverlap);
+      currentChunk = currentChunk.substring(overlapStart).trim() + " " + sentence;
+    }
+  }
+  
+  if (currentChunk.trim().length > 0) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  STATE.chunks = chunks.map((fullText, idx) => ({
     id: idx,
-    text: text.length > 500 ? text.substring(0, 500) + '…' : text,
-    fullText: text,
-    length: text.length
+    text: fullText.substring(0, 100) + '...', // Summary for UI
+    fullText: fullText, // Full preserved text for embeddings
+    length: fullText.length
   }));
   
   document.getElementById('chunkCount').textContent = STATE.chunks.length;
@@ -170,9 +197,6 @@ async function chunkText(text) {
 async function getEmbeddings() {
   STATE.embeddings = [];
   
-  // Try to use the Vercel API endpoint (like app.js does)
-  // If that fails, fall back to a simple local hashing approach for demo
-  
   for (let i = 0; i < STATE.chunks.length; i++) {
     try {
       const embedding = await getEmbedding(STATE.chunks[i].fullText);
@@ -180,7 +204,6 @@ async function getEmbeddings() {
       document.getElementById('embeddingCount').textContent = STATE.embeddings.length;
     } catch (err) {
       console.warn(`Failed to get embedding for chunk ${i}:`, err);
-      // Fall back to deterministic hash-based embedding
       STATE.embeddings.push(generateFallbackEmbedding(STATE.chunks[i].fullText));
       document.getElementById('embeddingCount').textContent = STATE.embeddings.length;
     }
@@ -188,7 +211,6 @@ async function getEmbeddings() {
 }
 
 async function getEmbedding(text) {
-  // Attempt to call OpenAI API via Vercel
   try {
     const response = await fetch('/api/embed', {
       method: 'POST',
@@ -205,58 +227,47 @@ async function getEmbedding(text) {
     
     return data.embedding;
   } catch (err) {
-    // Try direct OpenAI if available via environment
-    // Otherwise use fallback
     throw err;
   }
 }
 
 function generateFallbackEmbedding(text) {
-  // Deterministic hash-based 1536-dim embedding for fallback
-  // Uses text words, length, unique chars to generate pseudo-semantic vector
   const words = text.toLowerCase().split(/\s+/);
-  const dim = 1536;  // text-embedding-3-small output size
+  const dim = 1536;  
   const embedding = new Array(dim).fill(0);
   
-  // Hash each word and distribute across dimensions
   words.forEach((word, idx) => {
     let hash = 0;
     for (let i = 0; i < word.length; i++) {
       const char = word.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;  // Convert to 32bit int
+      hash = hash & hash;  
     }
     
     const pos = Math.abs(hash) % dim;
     embedding[pos] += (Math.sin(hash / 1000) + Math.cos(idx)) / 2;
   });
   
-  // Normalize
   const norm = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0));
   return embedding.map(v => norm > 0 ? v / norm : 0);
 }
 
 function reduceTo2D() {
-  // Simple PCA-like reduction: use top 2 components via covariance
   if (STATE.embeddings.length === 0) return;
   
   const dim = STATE.embeddings[0].length;
   const n = STATE.embeddings.length;
   
-  // Compute mean
   const mean = new Array(dim).fill(0);
   STATE.embeddings.forEach(emb => {
     emb.forEach((v, i) => mean[i] += v);
   });
   mean.forEach((_, i) => mean[i] /= n);
   
-  // Center data
   const centered = STATE.embeddings.map(emb =>
     emb.map((v, i) => v - mean[i])
   );
   
-  // Compute covariance matrix (full is O(d^2), so use random projection)
-  // For speed, project onto random basis and take top 2
   const v1 = new Array(dim).fill(0);
   const v2 = new Array(dim).fill(0);
   
@@ -265,13 +276,11 @@ function reduceTo2D() {
     v2[i] = Math.cos(i * 0.1 + 1.57);
   }
   
-  // Project each centered vector onto v1, v2
   STATE.coordinates = centered.map(vec => [
     vec.reduce((sum, v, i) => sum + v * v1[i], 0),
     vec.reduce((sum, v, i) => sum + v * v2[i], 0)
   ]);
   
-  // Normalize to canvas bounds
   normalizeCoordinates();
 }
 
@@ -310,16 +319,16 @@ function draw() {
   const w = canvas.width;
   const h = canvas.height;
   
-  // Clear with dark background
-  ctx.fillStyle = '#0a0a0a';
+  // Clear with light background
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
   
   // Draw subtle grid
   drawGrid(ctx, w, h);
   
   if (STATE.coordinates.length === 0) {
-    ctx.fillStyle = '#444';
-    ctx.font = '14px sans-serif';
+    ctx.fillStyle = '#86868b';
+    ctx.font = '14px -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Upload a document to create the constellation', w / 2, h / 2);
     return;
@@ -335,7 +344,7 @@ function draw() {
 }
 
 function drawGrid(ctx, w, h) {
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.03)';
   ctx.lineWidth = 1;
   
   const gridSize = 100;
@@ -355,7 +364,7 @@ function drawGrid(ctx, w, h) {
 }
 
 function drawConnections(ctx) {
-  ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
   ctx.lineWidth = 1;
   
   for (let i = 0; i < STATE.coordinates.length - 1; i++) {
@@ -375,34 +384,21 @@ function drawNodes(ctx) {
     const isHover = idx === STATE.hoverChunkIdx;
     const isSelected = idx === STATE.selectedChunkIdx;
     
-    // Calculate color based on position and density
-    const hue = (idx / STATE.coordinates.length) * 360;
-    const saturation = isHover ? 100 : 70;
-    const lightness = isSelected ? 60 : 50;
-    const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    // Monochromatic Apple aesthetic for nodes
+    const baseColor = isSelected ? '#1d1d1f' : isHover ? '#515154' : '#86868b';
     
-    // Glow effect
-    const radius = isHover ? 12 : isSelected ? 10 : 6;
-    const glowRadius = radius * 2;
-    
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
-    glow.addColorStop(0, color + '40');
-    glow.addColorStop(1, color + '00');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
-    ctx.fill();
+    const radius = isHover ? 8 : isSelected ? 7 : 4;
     
     // Core dot
-    ctx.fillStyle = color;
+    ctx.fillStyle = baseColor;
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
     
     // Highlight ring
     if (isHover || isSelected) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(x, y, radius + 4, 0, Math.PI * 2);
       ctx.stroke();
@@ -420,7 +416,6 @@ function resizeCanvas() {
   
   STATE.ctx.scale(dpr, dpr);
   
-  // Recenter coordinates if they exist
   if (STATE.coordinates.length > 0) {
     normalizeCoordinates();
   }
@@ -435,9 +430,8 @@ function handleCanvasMouseMove(e) {
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
   
-  // Find nearest chunk
   let nearest = -1;
-  let minDist = 20;  // Hover radius
+  let minDist = 20;  
   
   STATE.coordinates.forEach((coord, idx) => {
     const dist = Math.hypot(coord[0] - x, coord[1] - y);
@@ -449,13 +443,12 @@ function handleCanvasMouseMove(e) {
   
   STATE.hoverChunkIdx = nearest;
   
-  // Update tooltip
   const tooltip = document.getElementById('tooltip');
   if (nearest >= 0) {
     const chunk = STATE.chunks[nearest];
     tooltip.textContent = chunk.fullText.substring(0, 200);
-    tooltip.style.left = (e.clientX - rect.left + 10) + 'px';
-    tooltip.style.top = (e.clientY - rect.top + 10) + 'px';
+    tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+    tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
     tooltip.classList.remove('hidden');
     tooltip.classList.add('visible');
   } else {
@@ -484,7 +477,7 @@ function updateStatus(type, message) {
   
   if (type === 'processing') {
     statusBar.classList.add('processing');
-    statusLabel.textContent = 'processing…';
+    statusLabel.textContent = 'processing...';
   } else if (type === 'error') {
     statusBar.classList.add('error');
     statusLabel.textContent = 'error';
@@ -510,7 +503,7 @@ function renderChunksList() {
   list.style.display = 'block';
   container.innerHTML = STATE.chunks.map((chunk, idx) => `
     <div class="chunk-item ${idx === STATE.selectedChunkIdx ? 'active' : ''}" data-idx="${idx}">
-      ${chunk.text.substring(0, 50)}…
+      ${chunk.fullText.substring(0, 60)}...
     </div>
   `).join('');
   
