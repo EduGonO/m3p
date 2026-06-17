@@ -6,6 +6,7 @@
 
 const STATE = {
   concepts: [],        // Extracted concepts from /api/process
+  summary: "",         // Document summary
   embeddings: {},      // Embedding vectors mapped by concept index
   coordinates: {},     // [x, y] coordinates in the physics simulation
   velocities: {},      // [vx, vy] velocities for physics
@@ -68,7 +69,9 @@ async function handleFileUpload(file) {
   if (!file) return;
   
   STATE.isProcessing = true;
-  updateStatus('analyse sémantique du texte...');
+  showUploadProgress(file.name);
+  setProgressBar(10);
+  updateStatus('extraction du texte...');
   
   try {
     let text = '';
@@ -78,21 +81,27 @@ async function handleFileUpload(file) {
     } else if (file.name.endsWith('.md') || file.name.endsWith('.txt') || file.type === 'text/plain') {
       text = await extractTextFromFile(file);
     } else {
-      throw new Error('format de fichier non supporté (utiliser pdf, txt ou markdown)');
+      throw new Error('format de fichier non supporté');
     }
     
     if (!text || text.trim().length === 0) {
-      throw new Error('aucun texte extrait du fichier');
+      throw new Error('aucun texte extrait');
     }
     
-    // Step 1: Process text using GPT to extract high-quality concepts
-    const concepts = await processText(text);
-    if (!concepts || concepts.length === 0) {
-      throw new Error('impossible d\'extraire les concepts du texte');
+    setProgressBar(30);
+    updateStatus('analyse sémantique...');
+    
+    // Step 1: Process text using GPT to extract concepts & summary
+    const result = await processText(text);
+    if (!result.concepts || result.concepts.length === 0) {
+      throw new Error('échec de l\'extraction');
     }
+    
+    setProgressBar(50);
     
     // Clear previous state
-    STATE.concepts = concepts;
+    STATE.concepts = result.concepts;
+    STATE.summary = result.summary || "";
     STATE.embeddings = {};
     STATE.coordinates = {};
     STATE.velocities = {};
@@ -100,19 +109,50 @@ async function handleFileUpload(file) {
     STATE.selectedIdx = -1;
     STATE.hoverIdx = -1;
     
-    // Render initial list in sidebar (in loading state)
+    // Update UI with summary and list
+    displaySummary();
     renderNotionsList();
     
-    // Step 2: Fetch embeddings sequentially and animate them as they load
-    updateStatus('cartographie des concepts...');
+    // Step 2: Fetch embeddings
+    updateStatus('génération de la constellation...');
     await loadEmbeddings();
+    
+    setProgressBar(100);
+    setTimeout(() => hideUploadProgress(), 1000);
     
     updateStatus('paysage de pensée prêt');
     STATE.isProcessing = false;
   } catch (err) {
     console.error(err);
     updateStatus(`erreur: ${err.message.toLowerCase()}`);
+    setProgressBar(0);
     STATE.isProcessing = false;
+  }
+}
+
+function showUploadProgress(filename) {
+  document.getElementById('uploadContent').style.display = 'none';
+  document.getElementById('uploadInfo').style.display = 'block';
+  document.getElementById('filenameDisplay').textContent = filename;
+}
+
+function hideUploadProgress() {
+  document.getElementById('uploadContent').style.display = 'block';
+  document.getElementById('uploadInfo').style.display = 'none';
+}
+
+function setProgressBar(percent) {
+  document.getElementById('progressBar').style.width = `${percent}%`;
+}
+
+function displaySummary() {
+  const summaryEl = document.getElementById('docSummary');
+  const textEl = document.getElementById('summaryText');
+  if (STATE.summary) {
+    summaryEl.style.display = 'flex';
+    textEl.textContent = STATE.summary;
+  } else {
+    summaryEl.style.display = 'none';
   }
 }
 
@@ -133,7 +173,7 @@ async function extractTextFromPDF(file) {
         reject(err);
       }
     };
-    reader.onerror = () => reject(new Error('erreur lors de la lecture du pdf'));
+    reader.onerror = () => reject(new Error('erreur lecture pdf'));
     reader.readAsArrayBuffer(file);
   });
 }
@@ -142,7 +182,7 @@ async function extractTextFromFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => resolve(e.target.result);
-    reader.onerror = () => reject(new Error('erreur lors de la lecture du fichier'));
+    reader.onerror = () => reject(new Error('erreur lecture fichier'));
     reader.readAsText(file);
   });
 }
@@ -163,8 +203,7 @@ async function processText(text) {
       throw new Error(`http ${response.status}`);
     }
     
-    const data = await response.json();
-    return data.concepts || [];
+    return await response.json();
   } catch (err) {
     throw err;
   }
@@ -183,8 +222,6 @@ async function getEmbedding(text) {
     }
     
     const data = await response.json();
-    if (!data.embedding) throw new Error('no embedding vector');
-    
     return data.embedding;
   } catch (err) {
     return generateFallbackEmbedding(text);
@@ -221,29 +258,30 @@ async function loadEmbeddings() {
   const w = wrapper.clientWidth;
   const h = wrapper.clientHeight;
   
+  const baseProgress = 50;
+  const step = 50 / STATE.concepts.length;
+
   for (let i = 0; i < STATE.concepts.length; i++) {
     const concept = STATE.concepts[i];
-    
-    updateStatus(`calcul de la relation sémantique (${i + 1}/${STATE.concepts.length}): ${concept.title}`);
+    updateStatus(`liaison sémantique: ${concept.title}`);
     
     const vector = await getEmbedding(`${concept.title}: ${concept.description}`);
     STATE.embeddings[i] = vector;
     
     STATE.coordinates[i] = [
-      w / 2 + (Math.random() - 0.5) * 50,
-      h / 2 + (Math.random() - 0.5) * 50
+      w / 2 + (Math.random() - 0.5) * 60,
+      h / 2 + (Math.random() - 0.5) * 60
     ];
     STATE.velocities[i] = [0, 0];
     
     computeSimilaritiesForNode(i);
     renderNotionsList();
+    setProgressBar(baseProgress + (i + 1) * step);
   }
 }
 
 function cosineSimilarity(v1, v2) {
-  let dotProduct = 0;
-  let mA = 0;
-  let mB = 0;
+  let dotProduct = 0, mA = 0, mB = 0;
   for (let i = 0; i < v1.length; i++) {
     dotProduct += v1[i] * v2[i];
     mA += v1[i] * v1[i];
@@ -254,14 +292,12 @@ function cosineSimilarity(v1, v2) {
 
 function computeSimilaritiesForNode(nodeIdx) {
   STATE.similarities[nodeIdx] = {};
-  
   for (let i = 0; i <= nodeIdx; i++) {
     if (i === nodeIdx) {
       STATE.similarities[nodeIdx][i] = 1;
     } else if (STATE.embeddings[i] && STATE.embeddings[nodeIdx]) {
       const sim = cosineSimilarity(STATE.embeddings[i], STATE.embeddings[nodeIdx]);
       STATE.similarities[nodeIdx][i] = sim;
-      
       if (!STATE.similarities[i]) STATE.similarities[i] = {};
       STATE.similarities[i][nodeIdx] = sim;
     }
@@ -287,95 +323,60 @@ function updatePhysics() {
   const w = wrapper.clientWidth;
   const h = wrapper.clientHeight;
   
-  const k = 150; // Natural distance
+  const k = 150; 
   const forcesX = {};
   const forcesY = {};
   
-  loadedIndices.forEach(i => {
-    forcesX[i] = 0;
-    forcesY[i] = 0;
-  });
+  loadedIndices.forEach(i => { forcesX[i] = 0; forcesY[i] = 0; });
   
-  // 1. Repulsive forces between all loaded nodes
+  // 1. Repulsive forces
   for (let i = 0; i < n; i++) {
     const idxA = loadedIndices[i];
     for (let j = i + 1; j < n; j++) {
       const idxB = loadedIndices[j];
-      
       const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
       const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
       const dist = Math.hypot(dx, dy) || 1;
-      
       const force = (k * k) / dist;
       const fx = (dx / dist) * force * 0.15;
       const fy = (dy / dist) * force * 0.15;
-      
-      forcesX[idxA] -= fx;
-      forcesY[idxA] -= fy;
-      forcesX[idxB] += fx;
-      forcesY[idxB] += fy;
+      forcesX[idxA] -= fx; forcesY[idxA] -= fy;
+      forcesX[idxB] += fx; forcesY[idxB] += fy;
     }
   }
   
-  // 2. Attractive forces based on cosine similarity
+  // 2. Semantic Attraction (Similarities)
   for (let i = 0; i < n; i++) {
     const idxA = loadedIndices[i];
     for (let j = i + 1; j < n; j++) {
       const idxB = loadedIndices[j];
-      
       const sim = STATE.similarities[idxA]?.[idxB] || 0;
-      if (sim <= 0) continue;
-      
+      if (sim < 0.5) continue;
       const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
       const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
       const dist = Math.hypot(dx, dy) || 1;
-      
-      const targetDist = k * (1 - sim + 0.1);
-      const force = (dist - targetDist) * (sim + 0.1) * 0.12;
-      
+      const targetDist = k * (1.2 - sim);
+      const force = (dist - targetDist) * (sim * 0.15);
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
-      
-      forcesX[idxA] += fx;
-      forcesY[idxA] += fy;
-      forcesX[idxB] -= fx;
-      forcesY[idxB] -= fy;
+      forcesX[idxA] += fx; forcesY[idxA] += fy;
+      forcesX[idxB] -= fx; forcesY[idxB] -= fy;
     }
   }
   
-  // 3. Weak attraction between consecutive nodes to maintain textual narrative flow
-  for (let i = 0; i < n - 1; i++) {
-    const idxA = loadedIndices[i];
-    const idxB = loadedIndices[i + 1];
-    
-    const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
-    const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
-    const dist = Math.hypot(dx, dy) || 1;
-    
-    const force = (dist - 120) * 0.05;
-    const fx = (dx / dist) * force;
-    const fy = (dy / dist) * force;
-    
-    forcesX[idxA] += fx;
-    forcesY[idxA] += fy;
-    forcesX[idxB] -= fx;
-    forcesY[idxB] -= fy;
-  }
-  
-  // 4. Center-gravity forces
+  // 3. Center gravity
   loadedIndices.forEach(idx => {
     const dx = w / 2 - STATE.coordinates[idx][0];
     const dy = h / 2 - STATE.coordinates[idx][1];
-    forcesX[idx] += dx * 0.012;
-    forcesY[idx] += dy * 0.012;
+    forcesX[idx] += dx * 0.01;
+    forcesY[idx] += dy * 0.01;
   });
   
-  // Apply forces to update positions
-  const damping = 0.78;
+  // Apply physics
+  const damping = 0.75;
   loadedIndices.forEach(idx => {
     STATE.velocities[idx][0] = (STATE.velocities[idx][0] + forcesX[idx] * 0.1) * damping;
     STATE.velocities[idx][1] = (STATE.velocities[idx][1] + forcesY[idx] * 0.1) * damping;
-    
     STATE.coordinates[idx][0] += STATE.velocities[idx][0];
     STATE.coordinates[idx][1] += STATE.velocities[idx][1];
   });
@@ -391,11 +392,8 @@ function draw() {
   const w = canvas.width / (window.devicePixelRatio || 1);
   const h = canvas.height / (window.devicePixelRatio || 1);
   
-  // Clear with light background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
-  
-  // Grid
   drawGrid(ctx, w, h);
   
   const loadedIndices = Object.keys(STATE.coordinates).map(Number);
@@ -403,55 +401,21 @@ function draw() {
     ctx.fillStyle = '#86868b';
     ctx.font = '12px -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
     ctx.fillText('déposer un texte pour cartographier le paysage conceptuel', w / 2, h / 2);
     return;
   }
   
-  // Draw similarity links (very thin dashed lines)
-  drawSimilarityLinks(ctx, loadedIndices);
-  
-  // Draw consecutive flow trajectory (continuous thin line)
-  drawTrajectory(ctx, loadedIndices);
-  
-  // Draw nodes
-  drawNodes(ctx, loadedIndices);
-}
-
-function drawGrid(ctx, w, h) {
-  ctx.strokeStyle = '#f5f5f7';
-  ctx.lineWidth = 1;
-  
-  const size = 80;
-  for (let x = 0; x < w; x += size) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
-    ctx.stroke();
-  }
-  for (let y = 0; y < h; y += size) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
-    ctx.stroke();
-  }
-}
-
-function drawSimilarityLinks(ctx, indices) {
+  // 1. Draw Semantic links (Constellation)
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)';
   ctx.lineWidth = 1;
-  ctx.setLineDash([4, 4]);
-  
-  for (let i = 0; i < indices.length; i++) {
-    const idxA = indices[i];
-    for (let j = i + 1; j < indices.length; j++) {
-      const idxB = indices[j];
+  for (let i = 0; i < loadedIndices.length; i++) {
+    const idxA = loadedIndices[i];
+    for (let j = i + 1; j < loadedIndices.length; j++) {
+      const idxB = loadedIndices[j];
       const sim = STATE.similarities[idxA]?.[idxB] || 0;
-      
-      if (sim > 0.45 && Math.abs(idxA - idxB) > 1) {
+      if (sim > 0.55) {
         const [x1, y1] = STATE.coordinates[idxA];
         const [x2, y2] = STATE.coordinates[idxB];
-        
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
@@ -459,60 +423,65 @@ function drawSimilarityLinks(ctx, indices) {
       }
     }
   }
-  ctx.setLineDash([]);
-}
 
-function drawTrajectory(ctx, indices) {
-  ctx.strokeStyle = '#d2d2d7';
-  ctx.lineWidth = 1.2;
-  
-  for (let i = 0; i < indices.length - 1; i++) {
-    const idxA = indices[i];
-    const idxB = indices[i + 1];
-    
-    if (STATE.coordinates[idxA] && STATE.coordinates[idxB]) {
-      const [x1, y1] = STATE.coordinates[idxA];
-      const [x2, y2] = STATE.coordinates[idxB];
-      
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
+  // 2. Draw Narrative Trajectory (Subtle sequential line)
+  ctx.strokeStyle = 'rgba(210, 210, 215, 0.4)';
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i < loadedIndices.length - 1; i++) {
+    const idxA = loadedIndices[i];
+    const idxB = loadedIndices[i + 1];
+    const [x1, y1] = STATE.coordinates[idxA];
+    const [x2, y2] = STATE.coordinates[idxB];
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
   }
-}
 
-function drawNodes(ctx, indices) {
-  indices.forEach(idx => {
+  // 3. Draw Nodes
+  loadedIndices.forEach(idx => {
     const [x, y] = STATE.coordinates[idx];
     const isHover = idx === STATE.hoverIdx;
     const isSelected = idx === STATE.selectedIdx;
+    const concept = STATE.concepts[idx];
+    const weight = concept.weight || 5;
     
-    const radius = isSelected ? 6 : isHover ? 7 : 4.5;
+    const baseRadius = 3 + (weight / 3);
+    const radius = isSelected ? baseRadius + 2 : isHover ? baseRadius + 3 : baseRadius;
     
-    ctx.fillStyle = isSelected ? '#1d1d1f' : isHover ? '#424245' : '#86868b';
+    ctx.fillStyle = isSelected ? '#1d1d1f' : isHover ? '#424245' : '#d2d2d7';
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
     
     if (isHover || isSelected) {
-      ctx.strokeStyle = isSelected ? 'rgba(0, 0, 0, 0.12)' : 'rgba(0, 0, 0, 0.06)';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(x, y, radius + 5, 0, Math.PI * 2);
+      ctx.arc(x, y, radius + 4, 0, Math.PI * 2);
       ctx.stroke();
     }
   });
 }
 
+function drawGrid(ctx, w, h) {
+  ctx.strokeStyle = '#f5f5f7';
+  ctx.lineWidth = 1;
+  const size = 80;
+  for (let x = 0; x < w; x += size) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  for (let y = 0; y < h; y += size) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+}
+
 function resizeCanvas() {
   const wrapper = document.querySelector('.canvas-wrapper');
   if (!STATE.canvas) return;
-  
   const dpr = window.devicePixelRatio || 1;
   STATE.canvas.width = wrapper.clientWidth * dpr;
   STATE.canvas.height = wrapper.clientHeight * dpr;
-  
   STATE.ctx.setTransform(1, 0, 0, 1, 0, 0);
   STATE.ctx.scale(dpr, dpr);
 }
@@ -525,31 +494,17 @@ function handleCanvasMouseMove(e) {
   const rect = STATE.canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  
   const loadedIndices = Object.keys(STATE.coordinates).map(Number);
-  let nearestIdx = -1;
-  let minDist = 24;  
-  
+  let nearestIdx = -1, minDist = 24;  
   loadedIndices.forEach(idx => {
     const dist = Math.hypot(STATE.coordinates[idx][0] - x, STATE.coordinates[idx][1] - y);
-    if (dist < minDist) {
-      minDist = dist;
-      nearestIdx = idx;
-    }
+    if (dist < minDist) { minDist = dist; nearestIdx = idx; }
   });
-  
   STATE.hoverIdx = nearestIdx;
-  
   const tooltip = document.getElementById('tooltip');
   if (nearestIdx >= 0) {
     const concept = STATE.concepts[nearestIdx];
-    
-    tooltip.innerHTML = `
-      <h3>${concept.title}</h3>
-      <p>${concept.description}</p>
-      ${concept.context ? `<div class="context">« ${concept.context} »</div>` : ''}
-    `;
-    
+    tooltip.innerHTML = `<h3>${concept.title}</h3><p>${concept.description}</p>${concept.context ? `<div class="context">« ${concept.context} »</div>` : ''}`;
     tooltip.style.left = (e.clientX - rect.left + 16) + 'px';
     tooltip.style.top = (e.clientY - rect.top + 16) + 'px';
     tooltip.classList.add('visible');
@@ -562,50 +517,33 @@ function handleCanvasClick(e) {
   if (STATE.hoverIdx >= 0) {
     STATE.selectedIdx = STATE.selectedIdx === STATE.hoverIdx ? -1 : STATE.hoverIdx;
     renderNotionsList();
-    
     if (STATE.selectedIdx >= 0) {
       const activeEl = document.querySelector(`.notion-item[data-idx="${STATE.selectedIdx}"]`);
-      if (activeEl) {
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
+      if (activeEl) activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }
 }
 
 function updateStatus(message) {
-  const indicator = document.getElementById('statusIndicator');
-  indicator.textContent = message;
+  document.getElementById('statusIndicator').textContent = message;
 }
 
 function renderNotionsList() {
   const list = document.getElementById('notionsList');
   const container = document.getElementById('notionsContainer');
-  
-  if (STATE.concepts.length === 0) {
-    list.style.display = 'none';
-    return;
-  }
-  
+  if (STATE.concepts.length === 0) { list.style.display = 'none'; return; }
   list.style.display = 'flex';
   container.innerHTML = STATE.concepts.map((concept, idx) => {
     const isLoaded = STATE.embeddings[idx] !== undefined;
     const isSelected = idx === STATE.selectedIdx;
-    
-    if (!isLoaded) {
-      return `
-        <div class="notion-item loading" data-idx="${idx}">
-          ${concept.title} (calcul...)
-        </div>
-      `;
-    }
-    
+    if (!isLoaded) return `<div class="notion-item loading" data-idx="${idx}">${concept.title} (calcul...)</div>`;
     return `
       <div class="notion-item ${isSelected ? 'active' : ''}" data-idx="${idx}">
         ${concept.title}
+        <span class="notion-weight">${concept.weight}/10</span>
       </div>
     `;
   }).join('');
-  
   container.querySelectorAll('.notion-item:not(.loading)').forEach(el => {
     el.addEventListener('click', () => {
       const idx = Number(el.dataset.idx);
