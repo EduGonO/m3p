@@ -40,7 +40,7 @@
     .header {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 4px;
     }
     
     .header h1 {
@@ -50,11 +50,18 @@
       color: #1d1d1f;
       text-transform: lowercase;
     }
-    
-    .header p {
+
+    .header .subtitle {
       font-size: 12px;
       color: #86868b;
       text-transform: lowercase;
+    }
+    
+    .header .tagline {
+      font-size: 12px;
+      color: #86868b;
+      text-transform: lowercase;
+      opacity: 0.8;
     }
     
     .upload-zone {
@@ -168,7 +175,6 @@
     }
     
     .notion-item {
-      padding: 12px;
       border: 1px solid #e5e5e7;
       border-radius: 6px;
       font-size: 12px;
@@ -177,9 +183,7 @@
       transition: all 0.2s ease;
       text-transform: lowercase;
       background: #ffffff;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      overflow: hidden;
     }
     
     .notion-item:hover {
@@ -189,7 +193,32 @@
     .notion-item.active {
       border-color: #1d1d1f;
       background: #fafafa;
+    }
+
+    .notion-header {
+      padding: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+
+    .notion-item.active .notion-header {
       font-weight: 500;
+    }
+
+    .notion-details {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out;
+      background: #ffffff;
+      border-top: 0px solid #e5e5e7;
+    }
+
+    .notion-item.active .notion-details {
+      max-height: 500px;
+      border-top-width: 1px;
+      padding: 12px;
     }
     
     .notion-item.loading {
@@ -197,6 +226,7 @@
       border-style: dashed;
       background: #fafafa;
       cursor: default;
+      padding: 12px;
     }
 
     .notion-weight {
@@ -204,12 +234,27 @@
       color: #86868b;
       font-weight: 400;
     }
+
+    .citation-block {
+      font-size: 11px;
+      color: #86868b;
+      line-height: 1.5;
+      padding-top: 8px;
+      border-top: 1px solid #f5f5f7;
+      margin-top: 8px;
+      font-style: italic;
+    }
     
     .canvas-wrapper {
       flex: 1;
       position: relative;
       background: #ffffff;
       overflow: hidden;
+      cursor: grab;
+    }
+
+    .canvas-wrapper:active {
+      cursor: grabbing;
     }
     
     #archipelCanvas {
@@ -226,6 +271,7 @@
       color: #86868b;
       text-transform: lowercase;
       transition: opacity 0.3s ease;
+      pointer-events: none;
     }
     
     .tooltip {
@@ -275,7 +321,8 @@
     <div class="sidebar">
       <div class="header">
         <h1>paysage de pensée</h1>
-        <p>cartographie conceptuelle de dissertation et de mémoire</p>
+        <div class="subtitle">projet - eduardo gonzalez ortiz</div>
+        <div class="tagline">cartographie conceptuelle de dissertation et de mémoire</div>
       </div>
       
       <div class="upload-zone" id="uploadZone">
@@ -302,7 +349,7 @@
       </div>
     </div>
     
-    <div class="canvas-wrapper">
+    <div class="canvas-wrapper" id="canvasWrapper">
       <canvas id="archipelCanvas"></canvas>
       <div class="status-indicator" id="statusIndicator">prêt</div>
       <div class="tooltip" id="tooltip"></div>
