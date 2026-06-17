@@ -129,7 +129,7 @@
       width: 0%;
       height: 100%;
       background: #1d1d1f;
-      transition: width 0.3s ease;
+      transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
     
     .doc-summary {
@@ -210,14 +210,13 @@
     .notion-details {
       max-height: 0;
       overflow: hidden;
-      transition: max-height 0.3s ease-out;
+      transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       background: #ffffff;
-      border-top: 0px solid #e5e5e7;
     }
 
     .notion-item.active .notion-details {
       max-height: 500px;
-      border-top-width: 1px;
+      border-top: 1px solid #e5e5e7;
       padding: 12px;
     }
     
