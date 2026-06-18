@@ -29,16 +29,23 @@ export default async function handler(req, res) {
             content: `You are a rigorous, precise philosophical assistant. Your task is to analyze the text and:
 1. Provide a concise, high-level summary of the document (3-4 sentences, in the document's original language).
 2. Extract the 10-15 most significant concepts, notions, images, or philosophical ideas.
+3. Identify "tension" links between concepts: find contradictions, opposing premises, logical gaps, or points of friction (polemos).
 
 Return a valid JSON object with:
 - "summary": The document summary.
 - "concepts": An array of objects.
+- "tensions": An array of objects.
 
 Each concept object must have:
 - "title": A concise title (2-4 words, strictly lowercase).
 - "description": A highly rigorous explanation (1-2 sentences).
 - "context": A short verbatim snippet from the text.
-- "weight": A number between 1 and 10 representing the relative importance or presence of this concept in the text.`
+- "weight": A number between 1 and 10 representing the relative importance or presence of this concept in the text.
+
+Each tension object must have:
+- "source": The title of the first concept (must match a title in the concepts array exactly).
+- "target": The title of the second concept (must match a title in the concepts array exactly).
+- "explanation": A concise explanation of the contradiction or friction between them.`
           },
           {
             role: 'user',
