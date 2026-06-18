@@ -46,7 +46,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (helpBtn) helpBtn.addEventListener('click', () => modal.style.display = 'flex');
   if (modalClose) modalClose.addEventListener('click', () => modal.style.display = 'none');
-  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+  if (modal) {
+    modal.addEventListener('click', (e) => { 
+      if (e.target === modal) modal.style.display = 'none'; 
+    });
+    
+    // Tab logic
+    modal.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        modal.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        const tabId = btn.getAttribute('data-tab');
+        document.getElementById(tabId).classList.add('active');
+      });
+    });
+  }
 
   // Slider interaction
   const slider = document.getElementById('thresholdSlider');
@@ -70,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   
   uploadZone.addEventListener('dragleave', () => {
-    uploadZone.classList.remove('dragover');
+    uploadZone.classList.remove('dragleave');
   });
   
   uploadZone.addEventListener('drop', e => {
@@ -84,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('mousemove', handleMouseMove);
   window.addEventListener('mouseup', handleMouseUp);
   STATE.canvas.addEventListener('click', handleCanvasClick);
+  STATE.canvas.addEventListener('dblclick', handleCanvasDblClick);
   
   // Run continuous animation loop
   requestAnimationFrame(animationLoop);
@@ -269,6 +285,18 @@ async function getEmbedding(text) {
   } catch (err) {
     return generateFallbackEmbedding(text);
   }
+}
+
+async function fetchBridge(conceptA, conceptB) {
+  try {
+    const response = await fetch('/api/bridge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conceptA, conceptB })
+    });
+    if (!response.ok) throw new Error(`http ${response.status}`);
+    return await response.json();
+  } catch (err) { throw err; }
 }
 
 function generateFallbackEmbedding(text) {
@@ -559,10 +587,28 @@ function draw() {
     const weight = concept.weight || 5;
     const baseRadius = 3 + (weight / 3);
     const radius = isSelected ? baseRadius + 2 : isHover ? baseRadius + 3 : baseRadius;
-    ctx.fillStyle = isSelected ? '#1d1d1f' : isHover ? '#424245' : '#d2d2d7';
+    
+    // Aesthetic for synthetic nodes
+    if (concept.isSynthetic) {
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = 'rgba(0, 122, 255, 0.6)';
+      ctx.strokeStyle = '#007aff';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 2]);
+      ctx.beginPath();
+      ctx.arc(x, y, radius + 2 + Math.sin(STATE.time * 2) * 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#007aff';
+    } else {
+      ctx.fillStyle = isSelected ? '#1d1d1f' : isHover ? '#424245' : '#d2d2d7';
+    }
+    
     ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
     if (isHover || isSelected) {
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)'; ctx.lineWidth = 1;
+      ctx.strokeStyle = concept.isSynthetic ? 'rgba(0, 122, 255, 0.2)' : 'rgba(0, 0, 0, 0.08)'; 
+      ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(x, y, radius + 4, 0, Math.PI * 2); ctx.stroke();
     }
   });
@@ -695,7 +741,14 @@ function updateTooltip() {
   const tooltip = document.getElementById('tooltip');
   if (STATE.hoverIdx >= 0) {
     const concept = STATE.concepts[STATE.hoverIdx];
-    tooltip.innerHTML = `<h3>${concept.title}</h3><p>${concept.description}</p>${concept.context ? `<div class="context">« ${concept.context} »</div>` : ''}`;
+    let content = `<h3>${concept.title}</h3><p>${concept.description}</p>`;
+    if (concept.isSynthetic) {
+      content = `<div style="color: #007aff; font-weight: 600; font-size: 10px; margin-bottom: 4px;">anamnèse synthétique</div>` + content;
+    }
+    if (concept.context) {
+      content += `<div class="context">« ${concept.context} »</div>`;
+    }
+    tooltip.innerHTML = content;
     tooltip.style.left = (STATE.lastMousePos.x + 16) + 'px';
     tooltip.style.top = (STATE.lastMousePos.y + 16) + 'px';
     tooltip.classList.add('visible');
@@ -727,6 +780,67 @@ function handleCanvasClick(e) {
   }
 }
 
+async function handleCanvasDblClick(e) {
+  if (STATE.hoverIdx >= 0 || STATE.isProcessing) return;
+
+  const rect = STATE.canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left - STATE.offset.x;
+  const y = e.clientY - rect.top - STATE.offset.y;
+
+  const loadedIndices = Object.keys(STATE.coordinates).map(Number);
+  if (loadedIndices.length < 2) return;
+
+  // Find two closest nodes
+  let distances = loadedIndices.map(idx => {
+    const dx = STATE.coordinates[idx][0] - x;
+    const dy = STATE.coordinates[idx][1] - y;
+    return { idx, dist: Math.hypot(dx, dy) };
+  });
+
+  distances.sort((a, b) => a.dist - b.dist);
+  const nodeA = STATE.concepts[distances[0].idx];
+  const nodeB = STATE.concepts[distances[1].idx];
+
+  updateStatus('invocation de l\'anamnèse...');
+  STATE.isProcessing = true;
+
+  try {
+    const bridge = await fetchBridge(nodeA, nodeB);
+    const newIdx = STATE.concepts.length;
+    
+    const syntheticNode = {
+      title: bridge.title,
+      description: bridge.description,
+      weight: bridge.weight,
+      isSynthetic: true,
+      context: `anamnèse entre "${nodeA.title}" et "${nodeB.title}"`
+    };
+
+    STATE.concepts.push(syntheticNode);
+    STATE.coordinates[newIdx] = [x, y];
+    STATE.velocities[newIdx] = [0, 0];
+    
+    // Handle tensions if specified
+    if (bridge.isTensionA) STATE.tensions.push({ source: bridge.title, target: nodeA.title, explanation: bridge.relationToA });
+    if (bridge.isTensionB) STATE.tensions.push({ source: bridge.title, target: nodeB.title, explanation: bridge.relationToB });
+    
+    // Add semantic links anyway for physics
+    STATE.similarities[newIdx] = {};
+    STATE.similarities[newIdx][distances[0].idx] = 0.8;
+    STATE.similarities[newIdx][distances[1].idx] = 0.8;
+    STATE.similarities[distances[0].idx][newIdx] = 0.8;
+    STATE.similarities[distances[1].idx][newIdx] = 0.8;
+
+    renderNotionsList();
+    updateStatus('anamnèse accomplie');
+    STATE.isProcessing = false;
+  } catch (err) {
+    console.error(err);
+    updateStatus('échec de l\'anamnèse');
+    STATE.isProcessing = false;
+  }
+}
+
 function updateStatus(message) {
   document.getElementById('statusIndicator').textContent = message;
 }
@@ -737,13 +851,13 @@ function renderNotionsList() {
   if (STATE.concepts.length === 0) { list.style.display = 'none'; return; }
   list.style.display = 'flex';
   container.innerHTML = STATE.concepts.map((concept, idx) => {
-    const isLoaded = STATE.embeddings[idx] !== undefined;
+    const isLoaded = STATE.embeddings[idx] !== undefined || concept.isSynthetic;
     const isSelected = idx === STATE.selectedIdx;
     if (!isLoaded) return `<div class="notion-item loading" data-idx="${idx}">${concept.title} (calcul...)</div>`;
     return `
-      <div class="notion-item ${isSelected ? 'active' : ''}" data-idx="${idx}">
-        <div class="notion-header">
-          ${concept.title}
+      <div class="notion-item ${isSelected ? 'active' : ''} ${concept.isSynthetic ? 'synthetic' : ''}" data-idx="${idx}">
+        <div class="notion-header" ${concept.isSynthetic ? 'style="color: #007aff;"' : ''}>
+          ${concept.isSynthetic ? '✦ ' : ''}${concept.title}
           <span class="notion-weight">${concept.weight}/10</span>
         </div>
         <div class="notion-details">
