@@ -219,7 +219,7 @@
     }
 
     .notions-list {
-      display: flex;
+      display: none;
       flex-direction: column;
       gap: 16px;
       flex: 1;
@@ -482,7 +482,7 @@
       color: #1d1d1f;
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      margin-bottom: 16px;
+      margin-bottom: 20px;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -502,72 +502,138 @@
       line-height: 1.7;
     }
 
-    .modal-example {
-      padding: 24px;
+    /* CSS Documentation Components */
+    .doc-viz {
       background: #fafafa;
-      border-radius: 12px;
-      font-size: 12px;
-      border-left: 3px solid #e5e5e7;
-      color: #86868b;
-      margin-top: 16px;
-    }
-
-    .tension-line-preview {
-      display: inline-block;
-      width: 40px;
-      height: 2px;
-      background: #ff3b30;
-      margin-right: 12px;
-      vertical-align: middle;
-    }
-
-    .synthetic-node-preview {
-      width: 14px;
-      height: 14px;
-      border: 1.5px dashed #007aff;
-      border-radius: 7px;
-      display: inline-block;
-      box-shadow: 0 0 10px rgba(0, 122, 255, 0.4);
-      vertical-align: middle;
-      margin-right: 12px;
-    }
-
-    .visual-mockup {
-      margin: 24px 0;
-      padding: 24px;
-      background: #fdfdfd;
       border: 1px solid #f5f5f7;
       border-radius: 12px;
-      font-family: "SF Mono", "Menlo", monospace;
-      color: #86868b;
-      font-size: 11px;
-      line-height: 1.5;
-      white-space: pre-wrap;
-    }
-
-    .flow-visual {
+      padding: 40px;
+      margin: 24px 0;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 20px 40px;
-      background: #fafafa;
-      border-radius: 12px;
-      margin: 20px 0;
-      font-size: 12px;
-      color: #1d1d1f;
+      justify-content: center;
+      position: relative;
+      min-height: 180px;
     }
 
-    .flow-step {
+    .pill-node {
+      background: #ffffff;
+      border: 1px solid #e5e5e7;
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 11px;
+      color: #1d1d1f;
+      text-transform: lowercase;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+      z-index: 2;
+    }
+
+    .pill-node.synthetic {
+      border-color: #007aff;
+      color: #007aff;
+      box-shadow: 0 0 10px rgba(0, 122, 255, 0.2);
+      animation: soft-pulse 3s infinite ease-in-out;
+    }
+
+    @keyframes soft-pulse {
+      0%, 100% { box-shadow: 0 0 8px rgba(0, 122, 255, 0.1); }
+      50% { box-shadow: 0 0 15px rgba(0, 122, 255, 0.3); }
+    }
+
+    .arrow-line {
+      height: 1px;
+      background: #d2d2d7;
+      width: 40px;
+      position: relative;
+      margin: 0 12px;
+    }
+
+    .arrow-line::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: -3px;
+      width: 6px;
+      height: 6px;
+      border-right: 1px solid #d2d2d7;
+      border-top: 1px solid #d2d2d7;
+      transform: rotate(45deg);
+    }
+
+    /* Cluster Viz */
+    .viz-cluster {
+      display: flex;
+      gap: 40px;
+      width: 100%;
+      justify-content: space-around;
+    }
+
+    .cluster-side {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 12px;
     }
 
-    .flow-arrow {
-      color: #d2d2d7;
-      font-size: 18px;
+    .cluster-label {
+      font-size: 10px;
+      color: #86868b;
+      text-transform: lowercase;
     }
+
+    .nodes-group {
+      position: relative;
+      width: 100px;
+      height: 80px;
+    }
+
+    .circle-node {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: #d2d2d7;
+      border-radius: 50%;
+    }
+
+    /* Tension Viz */
+    .tension-connection {
+      position: absolute;
+      width: 80px;
+      height: 1px;
+      border-top: 1px dashed #ff3b30;
+      z-index: 1;
+    }
+
+    .tension-tag {
+      position: absolute;
+      top: -16px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px;
+      color: #ff3b30;
+      text-transform: lowercase;
+      white-space: nowrap;
+    }
+
+    /* Synthesis Viz */
+    .synthesis-viz {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .source-nodes {
+      display: flex;
+      gap: 60px;
+    }
+
+    .gradient-line {
+      width: 1px;
+      height: 30px;
+      background: linear-gradient(to bottom, #d2d2d7, #007aff);
+    }
+
   </style>
 </head>
 <body>
@@ -611,7 +677,7 @@
         <div class="doc-summary-text" id="summaryText"></div>
       </div>
       
-      <div class="notions-list" id="notionsList" style="display: none;">
+      <div class="notions-list" id="notionsList">
         <div class="notions-title">notions</div>
         <div id="notionsContainer" class="notions-container"></div>
       </div>
@@ -629,20 +695,20 @@
     <div class="modal-content">
       <div class="modal-close" id="modalClose">×</div>
       <div class="modal-title-group">
-        <h2>fonctionnement</h2>
-        <div class="modal-subtitle">Eduardo Gonzalez Ortiz</div>
+        <h2>description projet</h2>
+        <div class="modal-subtitle">eduardo gonzalez ortiz • l2 philosophie</div>
       </div>
       
       <div class="modal-section">
         <h3>Comment ça marche</h3>
         <p>Cette plateforme analyse vos documents pour en extraire les concepts clés et les organiser automatiquement dans un espace interactif.</p>
         
-        <div class="flow-visual">
-          <div class="flow-step"><span>📄</span><span>PDF</span></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-step"><span>🔍</span><span>Analyse</span></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-step"><span>🔵</span><span>Carte</span></div>
+        <div class="doc-viz">
+          <div class="pill-node">pdf</div>
+          <div class="arrow-line"></div>
+          <div class="pill-node">analyse</div>
+          <div class="arrow-line"></div>
+          <div class="pill-node">carte</div>
         </div>
         
         <p>Chaque point représente une idée ou un concept. Plus un point est grand, plus le concept est central dans votre document.</p>
@@ -652,12 +718,30 @@
         <h3>Ajuster la carte (Force des liens)</h3>
         <p>Le curseur "Force des liens" contrôle la précision de l'affichage sémantique :</p>
         
-        <div class="visual-mockup">
-[ BAS ]                           [ HAUT ]
-  (.) (•)  (.)                      ( • )
- (•)  (.) (•)        ------>       /  |  \
-  (.) (•)  (.)                    ( • )-( • )
-(Nuage diffus)                  (Structure rigide)
+        <div class="doc-viz">
+          <div class="viz-cluster">
+            <div class="cluster-side">
+              <div class="nodes-group">
+                <div class="circle-node" style="top:10%;left:20%"></div>
+                <div class="circle-node" style="top:30%;left:40%"></div>
+                <div class="circle-node" style="top:20%;left:60%"></div>
+                <div class="circle-node" style="top:50%;left:30%"></div>
+                <div class="circle-node" style="top:40%;left:70%"></div>
+              </div>
+              <span class="cluster-label">bas</span>
+            </div>
+            <div class="arrow-line" style="width:20px;margin:20px 0"></div>
+            <div class="cluster-side">
+              <div class="nodes-group">
+                <div class="circle-node" style="top:35%;left:45%"></div>
+                <div class="circle-node" style="top:40%;left:50%"></div>
+                <div class="circle-node" style="top:30%;left:55%"></div>
+                <div class="circle-node" style="top:45%;left:48%"></div>
+                <div class="circle-node" style="top:38%;left:52%"></div>
+              </div>
+              <span class="cluster-label">haut</span>
+            </div>
+          </div>
         </div>
         
         <p>Un réglage bas montre toutes les associations subtiles, tandis qu'un réglage haut met en lumière la structure logique principale.</p>
@@ -665,11 +749,14 @@
 
       <div class="modal-section">
         <h3>Lignes de tension rouges</h3>
-        <p><span class="tension-line-preview"></span> Ces lignes vibrantes visualisent les paradoxes et les oppositions directes détectées dans le texte.</p>
+        <p>Les lignes vibrantes visualisent les paradoxes et les oppositions directes détectées dans le texte.</p>
         
-        <div class="visual-mockup">
-( Idée A ) < -- opposés -- > ( Idée B )
-           [ vibration ]
+        <div class="doc-viz">
+          <div class="pill-node" style="margin-right:80px">idée a</div>
+          <div class="tension-connection">
+            <span class="tension-tag">opposition</span>
+          </div>
+          <div class="pill-node">idée b</div>
         </div>
         
         <p>Elles indiquent des points de friction où le texte présente des arguments contradictoires qui s'excluent mutuellement.</p>
@@ -679,15 +766,21 @@
         <h3>Double-clic (Synthèse)</h3>
         <p>Double-cliquez sur un espace vide pour fusionner les deux idées les plus proches en un nouveau concept.</p>
         
-        <div class="visual-mockup">
-( Heidegger ) + ( Turing )
-        \      /
-         \    /
-          ( ✦ )
-"La machine comme oubli de l'être"
+        <div class="doc-viz">
+          <div class="synthesis-viz">
+            <div class="source-nodes">
+              <div class="pill-node">heidegger</div>
+              <div class="pill-node">turing</div>
+            </div>
+            <div style="display:flex;gap:110px">
+              <div class="gradient-line" style="transform:rotate(-30deg)"></div>
+              <div class="gradient-line" style="transform:rotate(30deg)"></div>
+            </div>
+            <div class="pill-node synthetic">✦ la machine comme oubli de l'être</div>
+          </div>
         </div>
         
-        <p><span class="synthetic-node-preview"></span> Le nouveau concept apparaît sous la forme d'un point bleu pulsant, créant une synthèse inédite entre vos documents.</p>
+        <p>Le nouveau concept apparaît sous la forme d'un point bleu pulsant, créant une synthèse inédite entre vos documents.</p>
       </div>
     </div>
   </div>
