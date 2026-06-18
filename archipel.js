@@ -7,12 +7,13 @@
 const STATE = {
   concepts: [],        // Extracted concepts from /api/process
   summary: "",         // Document summary
+  tensions: [],        // Tension links between concepts
   embeddings: {},      // Embedding vectors mapped by concept index
   coordinates: {},     // [x, y] coordinates in the physics simulation
   velocities: {},      // [vx, vy] velocities for physics
   selectedIdx: -1,
   hoverIdx: -1,
-  hoverLink: null,     // {idxA, idxB, sim}
+  hoverLink: null,     // {idxA, idxB, sim, isTension}
   isProcessing: false,
   canvas: null,
   ctx: null,
@@ -21,7 +22,9 @@ const STATE = {
   targetOffset: { x: 0, y: 0 }, // For smooth panning
   isDragging: false,
   lastMousePos: { x: 0, y: 0 },
-  progressInterval: null
+  progressInterval: null,
+  threshold: 0.55,     // Dynamic semantic link threshold
+  time: 0              // For animations
 };
 
 // ============================================================================
@@ -36,6 +39,14 @@ document.addEventListener('DOMContentLoaded', () => {
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
   
+  // Slider interaction
+  const slider = document.getElementById('thresholdSlider');
+  if (slider) {
+    slider.addEventListener('input', (e) => {
+      STATE.threshold = parseFloat(e.target.value);
+    });
+  }
+
   // File input
   const fileInput = document.getElementById('fileInput');
   const uploadZone = document.getElementById('uploadZone');
@@ -112,6 +123,7 @@ async function handleFileUpload(file) {
     // Clear previous state
     STATE.concepts = result.concepts;
     STATE.summary = result.summary || "";
+    STATE.tensions = result.tensions || [];
     STATE.embeddings = {};
     STATE.coordinates = {};
     STATE.velocities = {};
@@ -318,6 +330,7 @@ function computeSimilaritiesForNode(nodeIdx) {
 // ============================================================================
 
 function animationLoop() {
+  STATE.time += 0.1;
   updatePhysics();
   updatePanning();
   draw();
@@ -376,12 +389,13 @@ function updatePhysics() {
     }
   }
   
+  // Semantic Spring Forces
   for (let i = 0; i < n; i++) {
     const idxA = loadedIndices[i];
     for (let j = i + 1; j < n; j++) {
       const idxB = loadedIndices[j];
       const sim = STATE.similarities[idxA]?.[idxB] || 0;
-      if (sim < 0.5) continue;
+      if (sim < STATE.threshold) continue;
       const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
       const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
       const dist = Math.hypot(dx, dy) || 1;
@@ -393,6 +407,23 @@ function updatePhysics() {
       forcesX[idxB] -= fx; forcesY[idxB] -= fy;
     }
   }
+
+  // Tension (Repelling) Forces
+  STATE.tensions.forEach(tension => {
+    const idxA = STATE.concepts.findIndex(c => c.title === tension.source);
+    const idxB = STATE.concepts.findIndex(c => c.title === tension.target);
+    if (idxA >= 0 && idxB >= 0 && STATE.coordinates[idxA] && STATE.coordinates[idxB]) {
+      const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
+      const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
+      const dist = Math.hypot(dx, dy) || 1;
+      // Repelling force for tension links
+      const force = (k * 1.5) / dist; 
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+      forcesX[idxA] -= fx; forcesY[idxA] -= fy;
+      forcesX[idxB] += fx; forcesY[idxB] += fy;
+    }
+  });
   
   const centerGravity = 0.05;
   const maxCenterDist = Math.min(w, h) * 0.4;
@@ -458,25 +489,44 @@ function draw() {
   const mouseWorldX = STATE.lastMousePos.x - STATE.offset.x;
   const mouseWorldY = STATE.lastMousePos.y - STATE.offset.y;
 
+  // Draw semantic links
   for (let i = 0; i < loadedIndices.length; i++) {
     const idxA = loadedIndices[i];
     for (let j = i + 1; j < loadedIndices.length; j++) {
       const idxB = loadedIndices[j];
       const sim = STATE.similarities[idxA]?.[idxB] || 0;
-      if (sim > 0.55) {
+      if (sim > STATE.threshold) {
         const [x1, y1] = STATE.coordinates[idxA];
         const [x2, y2] = STATE.coordinates[idxB];
         const distToLine = getPointToSegmentDistance(mouseWorldX, mouseWorldY, x1, y1, x2, y2);
         const isHovered = distToLine < 5;
-        if (isHovered) linkToHover = { idxA, idxB, sim };
+        if (isHovered) linkToHover = { idxA, idxB, sim, isTension: false };
         ctx.strokeStyle = isHovered ? 'rgba(29, 29, 31, 0.4)' : 'rgba(0, 0, 0, 0.04)';
         ctx.lineWidth = isHovered ? 2 : 1;
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
       }
     }
   }
+
+  // Draw tension links as red vibrating springs
+  STATE.tensions.forEach(tension => {
+    const idxA = STATE.concepts.findIndex(c => c.title === tension.source);
+    const idxB = STATE.concepts.findIndex(c => c.title === tension.target);
+    if (idxA >= 0 && idxB >= 0 && STATE.coordinates[idxA] && STATE.coordinates[idxB]) {
+      const [x1, y1] = STATE.coordinates[idxA];
+      const [x2, y2] = STATE.coordinates[idxB];
+      
+      const distToLine = getPointToSegmentDistance(mouseWorldX, mouseWorldY, x1, y1, x2, y2);
+      const isHovered = distToLine < 5;
+      if (isHovered) linkToHover = { idxA, idxB, sim: 0, isTension: true, explanation: tension.explanation };
+
+      drawSpring(ctx, x1, y1, x2, y2, isHovered);
+    }
+  });
+
   STATE.hoverLink = linkToHover;
 
+  // Draw sequential path (optional visual aid)
   ctx.strokeStyle = 'rgba(210, 210, 215, 0.4)';
   ctx.lineWidth = 0.8;
   for (let i = 0; i < loadedIndices.length - 1; i++) {
@@ -487,6 +537,7 @@ function draw() {
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   }
 
+  // Draw concepts (nodes)
   loadedIndices.forEach(idx => {
     const [x, y] = STATE.coordinates[idx];
     const isHover = idx === STATE.hoverIdx;
@@ -505,6 +556,43 @@ function draw() {
 
   ctx.restore();
   updateTooltip();
+}
+
+function drawSpring(ctx, x1, y1, x2, y2, isHovered) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.hypot(dx, dy);
+  const steps = 12;
+  const amplitude = isHovered ? 6 : 4;
+  const freq = 0.5;
+  
+  // Vibration effect using STATE.time
+  const offset = Math.sin(STATE.time * 2) * 2;
+
+  ctx.strokeStyle = isHovered ? '#ff3b30' : 'rgba(255, 59, 48, 0.3)';
+  ctx.lineWidth = isHovered ? 2 : 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const px = x1 + dx * t;
+    const py = y1 + dy * t;
+    
+    // Normal vector for the spring "zig-zag"
+    const nx = -dy / dist;
+    const ny = dx / dist;
+    
+    // Sine wave for spring shape + vibration
+    const wave = Math.sin(t * Math.PI * freq * steps + STATE.time * 5) * (amplitude + offset);
+    
+    if (i === 0 || i === steps) {
+      ctx.lineTo(px, py);
+    } else {
+      ctx.lineTo(px + nx * wave, py + ny * wave);
+    }
+  }
+  ctx.stroke();
 }
 
 function getPointToSegmentDistance(px, py, x1, y1, x2, y2) {
@@ -599,7 +687,11 @@ function updateTooltip() {
   } else if (STATE.hoverLink) {
     const conceptA = STATE.concepts[STATE.hoverLink.idxA];
     const conceptB = STATE.concepts[STATE.hoverLink.idxB];
-    tooltip.innerHTML = `<h3>relation sémantique</h3><p>proximité sémantique entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${Math.round(STATE.hoverLink.sim * 100)}%</p>`;
+    if (STATE.hoverLink.isTension) {
+      tooltip.innerHTML = `<h3>tension sémantique (polemos)</h3><p>friction entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${STATE.hoverLink.explanation}</p>`;
+    } else {
+      tooltip.innerHTML = `<h3>relation sémantique (logos)</h3><p>proximité sémantique entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${Math.round(STATE.hoverLink.sim * 100)}%</p>`;
+    }
     tooltip.style.left = (STATE.lastMousePos.x + 16) + 'px';
     tooltip.style.top = (STATE.lastMousePos.y + 16) + 'px';
     tooltip.classList.add('visible');
