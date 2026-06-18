@@ -110,10 +110,17 @@
       font-size: 12px;
       font-weight: 500;
       color: #1d1d1f;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-transform: lowercase;
+    }
+
+    .upload-info .file-meta {
+      font-size: 10px;
+      color: #86868b;
+      margin-bottom: 8px;
       text-transform: lowercase;
     }
 
@@ -308,6 +315,9 @@
       background: #ffffff;
       overflow: hidden;
       cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
     }
 
     .canvas-wrapper:active {
@@ -371,6 +381,111 @@
     .tooltip.visible {
       opacity: 1;
     }
+
+    /* Help Button & Modal */
+    .help-btn {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      width: 24px;
+      height: 24px;
+      border-radius: 12px;
+      border: 1px solid #e5e5e7;
+      background: #ffffff;
+      color: #86868b;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      z-index: 10;
+    }
+
+    .help-btn:hover {
+      border-color: #1d1d1f;
+      color: #1d1d1f;
+      background: #fafafa;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+
+    .modal-content {
+      background: #ffffff;
+      border: 1px solid #e5e5e7;
+      border-radius: 12px;
+      max-width: 600px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 40px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
+      position: relative;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      cursor: pointer;
+      font-size: 18px;
+      color: #86868b;
+    }
+
+    .modal-content h2 {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 24px;
+      text-transform: lowercase;
+    }
+
+    .modal-section {
+      margin-bottom: 24px;
+    }
+
+    .modal-section h3 {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1d1d1f;
+      text-transform: lowercase;
+      margin-bottom: 8px;
+    }
+
+    .modal-section p {
+      font-size: 13px;
+      color: #86868b;
+      margin-bottom: 12px;
+    }
+
+    .modal-example {
+      padding: 12px;
+      background: #fafafa;
+      border-radius: 6px;
+      font-size: 11px;
+      border-left: 2px solid #e5e5e7;
+    }
+
+    .tension-line-preview {
+      display: inline-block;
+      width: 30px;
+      height: 2px;
+      background: #ff3b30;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
@@ -389,6 +504,7 @@
         </div>
         <div class="upload-info" id="uploadInfo">
           <div class="filename" id="filenameDisplay">document.pdf</div>
+          <div class="file-meta" id="fileMetaDisplay">application/pdf • 0 kb</div>
           <div class="progress-container">
             <div class="progress-bar" id="progressBar"></div>
           </div>
@@ -398,12 +514,12 @@
       <div class="controls">
         <div class="control-item">
           <div class="control-header">
-            <span class="control-label">seuil sémantique</span>
+            <span class="control-label">force des liens</span>
           </div>
           <input type="range" id="thresholdSlider" min="0" max="1" step="0.01" value="0.55" />
           <div class="threshold-values">
-            <span>apeiron (bas)</span>
-            <span>logos (haut)</span>
+            <span>bas</span>
+            <span>haut</span>
           </div>
         </div>
       </div>
@@ -420,9 +536,40 @@
     </div>
     
     <div class="canvas-wrapper" id="canvasWrapper">
+      <div class="help-btn" id="helpBtn">?</div>
       <canvas id="archipelCanvas"></canvas>
       <div class="status-indicator" id="statusIndicator">prêt</div>
       <div class="tooltip" id="tooltip"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-content">
+      <div class="modal-close" id="modalClose">×</div>
+      <h2>aide & fonctionnement</h2>
+      
+      <div class="modal-section">
+        <h3>cartographie sémantique</h3>
+        <p>cette plateforme analyse vos textes pour en extraire les concepts fondamentaux et les organiser spatialement selon leur proximité intellectuelle.</p>
+      </div>
+
+      <div class="modal-section">
+        <h3>force des liens</h3>
+        <p>le curseur ajuste la sensibilité de la connexion entre les idées. un réglage "bas" révèle toutes les nuances sémantiques, tandis qu'un réglage "haut" ne conserve que les associations les plus robustes (le logos).</p>
+      </div>
+
+      <div class="modal-section">
+        <h3>tensions héraclitéennes</h3>
+        <p><span class="tension-line-preview"></span>les lignes rouges ondulées représentent le "polemos" : des contradictions, des paradoxes ou des oppositions logiques détectées entre deux concepts. ces liens exercent une force de répulsion physique dans la constellation.</p>
+        <div class="modal-example">
+          exemple : une tension entre "liberté absolue" et "déterminisme social" sera visualisée par un ressort vibrant rouge.
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <h3>navigation</h3>
+        <p>cliquez et faites glisser pour explorer le paysage. survolez un concept pour lire sa définition et son contexte original dans votre document.</p>
+      </div>
     </div>
   </div>
 

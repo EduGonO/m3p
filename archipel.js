@@ -39,6 +39,15 @@ document.addEventListener('DOMContentLoaded', () => {
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
   
+  // Modal interaction
+  const helpBtn = document.getElementById('helpBtn');
+  const modal = document.getElementById('modalOverlay');
+  const modalClose = document.getElementById('modalClose');
+
+  if (helpBtn) helpBtn.addEventListener('click', () => modal.style.display = 'flex');
+  if (modalClose) modalClose.addEventListener('click', () => modal.style.display = 'none');
+  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
   // Slider interaction
   const slider = document.getElementById('thresholdSlider');
   if (slider) {
@@ -87,8 +96,8 @@ document.addEventListener('DOMContentLoaded', () => {
 async function handleFileUpload(file) {
   if (!file) return;
   
-  // Immediate UI update
-  showUploadProgress(file.name);
+  // Immediate UI update with metadata
+  showUploadProgress(file);
   setProgressBar(5);
   
   STATE.isProcessing = true;
@@ -170,10 +179,14 @@ function stopSimulatedProgress() {
   if (STATE.progressInterval) clearInterval(STATE.progressInterval);
 }
 
-function showUploadProgress(filename) {
+function showUploadProgress(file) {
   document.getElementById('uploadContent').style.display = 'none';
   document.getElementById('uploadInfo').style.display = 'block';
-  document.getElementById('filenameDisplay').textContent = filename;
+  document.getElementById('filenameDisplay').textContent = file.name;
+  
+  const sizeKb = Math.round(file.size / 1024);
+  const type = file.type || 'text/plain';
+  document.getElementById('fileMetaDisplay').textContent = `${type} • ${sizeKb} kb`;
 }
 
 function hideUploadProgress() {
@@ -330,7 +343,7 @@ function computeSimilaritiesForNode(nodeIdx) {
 // ============================================================================
 
 function animationLoop() {
-  STATE.time += 0.1;
+  STATE.time += 0.05; // Slower time for smoother vibration
   updatePhysics();
   updatePanning();
   draw();
@@ -408,7 +421,7 @@ function updatePhysics() {
     }
   }
 
-  // Tension (Repelling) Forces
+  // Tension (Repelling) Forces - Dampened
   STATE.tensions.forEach(tension => {
     const idxA = STATE.concepts.findIndex(c => c.title === tension.source);
     const idxB = STATE.concepts.findIndex(c => c.title === tension.target);
@@ -416,10 +429,10 @@ function updatePhysics() {
       const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
       const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
       const dist = Math.hypot(dx, dy) || 1;
-      // Repelling force for tension links
-      const force = (k * 1.5) / dist; 
-      const fx = (dx / dist) * force;
-      const fy = (dy / dist) * force;
+      // Reduced repelling force for tension links to dampen bouncing
+      const force = (k * 1.2) / dist; 
+      const fx = (dx / dist) * force * 0.8;
+      const fy = (dy / dist) * force * 0.8;
       forcesX[idxA] -= fx; forcesY[idxA] -= fy;
       forcesX[idxB] += fx; forcesY[idxB] += fy;
     }
@@ -443,10 +456,10 @@ function updatePhysics() {
     }
   });
   
-  const damping = 0.72;
+  const damping = 0.8; // Increased damping for less "bouncing"
   loadedIndices.forEach(idx => {
-    STATE.velocities[idx][0] = (STATE.velocities[idx][0] + forcesX[idx] * 0.1) * damping;
-    STATE.velocities[idx][1] = (STATE.velocities[idx][1] + forcesY[idx] * 0.1) * damping;
+    STATE.velocities[idx][0] = (STATE.velocities[idx][0] + forcesX[idx] * 0.08) * damping;
+    STATE.velocities[idx][1] = (STATE.velocities[idx][1] + forcesY[idx] * 0.08) * damping;
     STATE.coordinates[idx][0] += STATE.velocities[idx][0];
     STATE.coordinates[idx][1] += STATE.velocities[idx][1];
   });
@@ -563,11 +576,11 @@ function drawSpring(ctx, x1, y1, x2, y2, isHovered) {
   const dy = y2 - y1;
   const dist = Math.hypot(dx, dy);
   const steps = 12;
-  const amplitude = isHovered ? 6 : 4;
-  const freq = 0.5;
+  const amplitude = isHovered ? 4 : 2; // Dampened amplitude
+  const freq = 0.4; // Lower frequency
   
-  // Vibration effect using STATE.time
-  const offset = Math.sin(STATE.time * 2) * 2;
+  // Slower vibration effect
+  const vibration = Math.sin(STATE.time * 1.5) * (isHovered ? 1.5 : 0.8);
 
   ctx.strokeStyle = isHovered ? '#ff3b30' : 'rgba(255, 59, 48, 0.3)';
   ctx.lineWidth = isHovered ? 2 : 1.5;
@@ -583,8 +596,8 @@ function drawSpring(ctx, x1, y1, x2, y2, isHovered) {
     const nx = -dy / dist;
     const ny = dx / dist;
     
-    // Sine wave for spring shape + vibration
-    const wave = Math.sin(t * Math.PI * freq * steps + STATE.time * 5) * (amplitude + offset);
+    // Sine wave for spring shape + dampened vibration
+    const wave = Math.sin(t * Math.PI * freq * steps + STATE.time * 3) * (amplitude + vibration);
     
     if (i === 0 || i === steps) {
       ctx.lineTo(px, py);
@@ -645,6 +658,7 @@ function handleMouseDown(e) {
   if (!onNode) {
     STATE.isDragging = true;
     STATE.lastMousePos = { x, y };
+    e.preventDefault(); // Prevent text selection
   }
 }
 
@@ -658,6 +672,7 @@ function handleMouseMove(e) {
     STATE.targetOffset.x = STATE.offset.x;
     STATE.targetOffset.y = STATE.offset.y;
     STATE.lastMousePos = { x, y };
+    e.preventDefault(); // Prevent text selection
   } else {
     STATE.lastMousePos = { x, y };
     const mouseWorldX = x - STATE.offset.x;
