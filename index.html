@@ -450,14 +450,26 @@
       color: #1d1d1f;
     }
 
+    .modal-title-group {
+      margin-bottom: 40px;
+      border-bottom: 1px solid #f5f5f7;
+      padding-bottom: 24px;
+    }
+
     .modal-content h2 {
       font-size: 22px;
       font-weight: 500;
-      margin-bottom: 40px;
       text-transform: lowercase;
       letter-spacing: -0.02em;
-      border-bottom: 1px solid #f5f5f7;
-      padding-bottom: 20px;
+      margin-bottom: 4px;
+    }
+
+    .modal-subtitle {
+      font-size: 11px;
+      color: #86868b;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      text-transform: lowercase;
     }
 
     .modal-section {
@@ -532,6 +544,30 @@
       line-height: 1.5;
       white-space: pre-wrap;
     }
+
+    .flow-visual {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 40px;
+      background: #fafafa;
+      border-radius: 12px;
+      margin: 20px 0;
+      font-size: 12px;
+      color: #1d1d1f;
+    }
+
+    .flow-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .flow-arrow {
+      color: #d2d2d7;
+      font-size: 18px;
+    }
   </style>
 </head>
 <body>
@@ -592,37 +628,66 @@
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal-content">
       <div class="modal-close" id="modalClose">×</div>
-      <h2>aide & fonctionnement</h2>
+      <div class="modal-title-group">
+        <h2>fonctionnement</h2>
+        <div class="modal-subtitle">Eduardo Gonzalez Ortiz</div>
+      </div>
       
       <div class="modal-section">
         <h3>Comment ça marche</h3>
-        <p>Cette plateforme analyse vos documents (PDF, texte ou Markdown) pour en extraire les concepts clés et les organiser automatiquement dans un espace interactif.</p>
-        <p>Chaque point représente une idée, une notion ou un nom important trouvé dans votre texte. Plus un point est grand, plus le concept est central dans votre document.</p>
+        <p>Cette plateforme analyse vos documents pour en extraire les concepts clés et les organiser automatiquement dans un espace interactif.</p>
+        
+        <div class="flow-visual">
+          <div class="flow-step"><span>📄</span><span>PDF</span></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span>🔍</span><span>Analyse</span></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span>🔵</span><span>Carte</span></div>
+        </div>
+        
+        <p>Chaque point représente une idée ou un concept. Plus un point est grand, plus le concept est central dans votre document.</p>
       </div>
 
       <div class="modal-section">
         <h3>Ajuster la carte (Force des liens)</h3>
-        <p>Le curseur "Force des liens" vous permet de contrôler la précision de l'affichage :</p>
+        <p>Le curseur "Force des liens" contrôle la précision de l'affichage sémantique :</p>
+        
         <div class="visual-mockup">
-[ BAS ] <----------------------------------------> [ HAUT ]
-Affiche toutes les connexions,           Ne garde que les liens les 
-même les plus subtiles.                  plus forts et évidents.
+[ BAS ]                           [ HAUT ]
+  (.) (•)  (.)                      ( • )
+ (•)  (.) (•)        ------>       /  |  \
+  (.) (•)  (.)                    ( • )-( • )
+(Nuage diffus)                  (Structure rigide)
         </div>
-        <p>Un réglage bas permet de voir un nuage d'associations libres, tandis qu'un réglage haut met en lumière la structure logique principale.</p>
+        
+        <p>Un réglage bas montre toutes les associations subtiles, tandis qu'un réglage haut met en lumière la structure logique principale.</p>
       </div>
 
       <div class="modal-section">
         <h3>Lignes de tension rouges</h3>
-        <p><span class="tension-line-preview"></span> Les <strong>lignes rouges vibrantes</strong> représentent des tensions ou des contradictions détectées entre deux idées. Elles indiquent des points de friction où le texte présente des arguments opposés ou des paradoxes.</p>
-        <div class="modal-example">
-          <strong>Exemple :</strong> Si votre texte oppose la "liberté individuelle" à la "sécurité collective", une ligne rouge apparaîtra pour visualiser ce conflit.
+        <p><span class="tension-line-preview"></span> Ces lignes vibrantes visualisent les paradoxes et les oppositions directes détectées dans le texte.</p>
+        
+        <div class="visual-mockup">
+( Idée A ) < -- opposés -- > ( Idée B )
+           [ vibration ]
         </div>
+        
+        <p>Elles indiquent des points de friction où le texte présente des arguments contradictoires qui s'excluent mutuellement.</p>
       </div>
 
       <div class="modal-section">
         <h3>Double-clic (Synthèse)</h3>
-        <p>En faisant un <strong>double-clic</strong> sur un espace vide de la carte, l'intelligence artificielle identifie les deux concepts les plus proches et génère une nouvelle idée qui les relie ou les synthétise.</p>
-        <p><span class="synthetic-node-preview"></span> Cette nouvelle idée apparaît sous la forme d'un point bleu pulsant, représentant une synthèse créée à partir de votre document.</p>
+        <p>Double-cliquez sur un espace vide pour fusionner les deux idées les plus proches en un nouveau concept.</p>
+        
+        <div class="visual-mockup">
+( Heidegger ) + ( Turing )
+        \      /
+         \    /
+          ( ✦ )
+"La machine comme oubli de l'être"
+        </div>
+        
+        <p><span class="synthetic-node-preview"></span> Le nouveau concept apparaît sous la forme d'un point bleu pulsant, créant une synthèse inédite entre vos documents.</p>
       </div>
     </div>
   </div>

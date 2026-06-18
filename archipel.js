@@ -25,7 +25,8 @@ const STATE = {
   progressInterval: null,
   threshold: 0.55,     // Dynamic semantic link threshold
   time: 0,             // For animations
-  loadingNode: null    // { x, y } for the synthesis loader
+  loadingNode: null,   // { x, y } for the synthesis loader
+  physicsAlpha: 0.3    // Current physics alpha (0 = frozen, 0.3 = active)
 };
 
 // ============================================================================
@@ -362,7 +363,16 @@ function computeSimilaritiesForNode(nodeIdx) {
 
 function animationLoop() {
   STATE.time += 0.05; // Slower time for smoother vibration
-  updatePhysics();
+  
+  // Freeze physics on hover
+  const isHovered = STATE.hoverIdx >= 0 || STATE.hoverLink !== null;
+  const targetAlpha = isHovered ? 0 : 0.3;
+  STATE.physicsAlpha += (targetAlpha - STATE.physicsAlpha) * 0.15; // Smooth transition
+
+  if (STATE.physicsAlpha > 0.01) {
+    updatePhysics();
+  }
+  
   updatePanning();
   draw();
   requestAnimationFrame(animationLoop);
@@ -399,7 +409,7 @@ function updatePhysics() {
   const w = wrapper.clientWidth;
   const h = wrapper.clientHeight;
   
-  const k = 110; // Reduced distance for more compact layout
+  const k = 110; 
   const forcesX = {};
   const forcesY = {};
   
@@ -412,7 +422,7 @@ function updatePhysics() {
       const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
       const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
       const dist = Math.hypot(dx, dy) || 1;
-      const force = (k * k) / dist; // Reduced repulsion constant logic
+      const force = (k * k) / dist; 
       const fx = (dx / dist) * force * 0.12;
       const fy = (dy / dist) * force * 0.12;
       forcesX[idxA] -= fx; forcesY[idxA] -= fy;
@@ -430,7 +440,7 @@ function updatePhysics() {
       const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
       const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
       const dist = Math.hypot(dx, dy) || 1;
-      const targetDist = k * (1.1 - sim); // Tighter spring
+      const targetDist = k * (1.1 - sim); 
       const force = (dist - targetDist) * (sim * 0.2);
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
@@ -439,7 +449,7 @@ function updatePhysics() {
     }
   }
 
-  // Tension (Repelling) Forces - Dampened
+  // Tension (Repelling) Forces
   STATE.tensions.forEach(tension => {
     const idxA = STATE.concepts.findIndex(c => c.title === tension.source);
     const idxB = STATE.concepts.findIndex(c => c.title === tension.target);
@@ -447,7 +457,6 @@ function updatePhysics() {
       const dx = STATE.coordinates[idxB][0] - STATE.coordinates[idxA][0];
       const dy = STATE.coordinates[idxB][1] - STATE.coordinates[idxA][1];
       const dist = Math.hypot(dx, dy) || 1;
-      // Reduced repelling force for tension links to dampen bouncing
       const force = (k * 1.2) / dist; 
       const fx = (dx / dist) * force * 0.8;
       const fy = (dy / dist) * force * 0.8;
@@ -474,10 +483,10 @@ function updatePhysics() {
     }
   });
   
-  const damping = 0.8; // Increased damping for less "bouncing"
+  const damping = 0.8; 
   loadedIndices.forEach(idx => {
-    STATE.velocities[idx][0] = (STATE.velocities[idx][0] + forcesX[idx] * 0.08) * damping;
-    STATE.velocities[idx][1] = (STATE.velocities[idx][1] + forcesY[idx] * 0.08) * damping;
+    STATE.velocities[idx][0] = (STATE.velocities[idx][0] + forcesX[idx] * 0.08 * (STATE.physicsAlpha / 0.3)) * damping;
+    STATE.velocities[idx][1] = (STATE.velocities[idx][1] + forcesY[idx] * 0.08 * (STATE.physicsAlpha / 0.3)) * damping;
     STATE.coordinates[idx][0] += STATE.velocities[idx][0];
     STATE.coordinates[idx][1] += STATE.velocities[idx][1];
   });
@@ -539,7 +548,7 @@ function draw() {
     }
   }
 
-  // Draw tension links as red vibrating springs
+  // Draw tension links
   STATE.tensions.forEach(tension => {
     const idxA = STATE.concepts.findIndex(c => c.title === tension.source);
     const idxB = STATE.concepts.findIndex(c => c.title === tension.target);
@@ -557,7 +566,7 @@ function draw() {
 
   STATE.hoverLink = linkToHover;
 
-  // Draw sequential path (optional visual aid)
+  // Draw path
   ctx.strokeStyle = 'rgba(210, 210, 215, 0.4)';
   ctx.lineWidth = 0.8;
   for (let i = 0; i < loadedIndices.length - 1; i++) {
@@ -568,7 +577,7 @@ function draw() {
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   }
 
-  // Draw concepts (nodes)
+  // Draw concepts
   loadedIndices.forEach(idx => {
     const [x, y] = STATE.coordinates[idx];
     const isHover = idx === STATE.hoverIdx;
@@ -576,14 +585,14 @@ function draw() {
     const concept = STATE.concepts[idx];
     const weight = concept.weight || 5;
     const baseRadius = 3 + (weight / 3);
-    const radius = isSelected ? baseRadius + 2 : isHover ? baseRadius + 3 : baseRadius;
+    const radius = isSelected ? baseRadius + 4 : isHover ? baseRadius + 3 : baseRadius;
     
-    // Aesthetic for synthetic nodes
+    // Synthetic node aesthetic
     if (concept.isSynthetic) {
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = 'rgba(0, 122, 255, 0.6)';
+      ctx.shadowBlur = isHover || isSelected ? 20 : 15;
+      ctx.shadowColor = 'rgba(0, 122, 255, 0.7)';
       ctx.strokeStyle = '#007aff';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = (isHover || isSelected) ? 2 : 1.5;
       ctx.setLineDash([4, 2]);
       ctx.beginPath();
       ctx.arc(x, y, radius + 2 + Math.sin(STATE.time * 2) * 2, 0, Math.PI * 2);
@@ -592,18 +601,26 @@ function draw() {
       ctx.shadowBlur = 0;
       ctx.fillStyle = '#007aff';
     } else {
-      ctx.fillStyle = isSelected ? '#1d1d1f' : isHover ? '#424245' : '#d2d2d7';
+      if (isSelected) {
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillStyle = '#1d1d1f';
+      } else {
+        ctx.fillStyle = isHover ? '#424245' : '#d2d2d7';
+      }
     }
     
     ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
     if (isHover || isSelected) {
-      ctx.strokeStyle = concept.isSynthetic ? 'rgba(0, 122, 255, 0.2)' : 'rgba(0, 0, 0, 0.08)'; 
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = concept.isSynthetic ? 'rgba(0, 122, 255, 0.3)' : 'rgba(0, 0, 0, 0.08)'; 
+      ctx.lineWidth = isSelected ? 2 : 1;
       ctx.beginPath(); ctx.arc(x, y, radius + 4, 0, Math.PI * 2); ctx.stroke();
     }
   });
 
-  // Draw synthesis loading state
+  // Synthesis loading
   if (STATE.loadingNode) {
     const { x, y } = STATE.loadingNode;
     ctx.save();
@@ -628,10 +645,8 @@ function drawSpring(ctx, x1, y1, x2, y2, isHovered) {
   const dy = y2 - y1;
   const dist = Math.hypot(dx, dy);
   const steps = 12;
-  const amplitude = isHovered ? 4 : 2; // Dampened amplitude
-  const freq = 0.4; // Lower frequency
-  
-  // Slower vibration effect
+  const amplitude = isHovered ? 4 : 2; 
+  const freq = 0.4; 
   const vibration = Math.sin(STATE.time * 1.5) * (isHovered ? 1.5 : 0.8);
 
   ctx.strokeStyle = isHovered ? '#ff3b30' : 'rgba(255, 59, 48, 0.3)';
@@ -643,19 +658,11 @@ function drawSpring(ctx, x1, y1, x2, y2, isHovered) {
     const t = i / steps;
     const px = x1 + dx * t;
     const py = y1 + dy * t;
-    
-    // Normal vector for the spring "zig-zag"
     const nx = -dy / dist;
     const ny = dx / dist;
-    
-    // Sine wave for spring shape + dampened vibration
     const wave = Math.sin(t * Math.PI * freq * steps + STATE.time * 3) * (amplitude + vibration);
-    
-    if (i === 0 || i === steps) {
-      ctx.lineTo(px, py);
-    } else {
-      ctx.lineTo(px + nx * wave, py + ny * wave);
-    }
+    if (i === 0 || i === steps) { ctx.lineTo(px, py); } 
+    else { ctx.lineTo(px + nx * wave, py + ny * wave); }
   }
   ctx.stroke();
 }
@@ -710,7 +717,7 @@ function handleMouseDown(e) {
   if (!onNode) {
     STATE.isDragging = true;
     STATE.lastMousePos = { x, y };
-    e.preventDefault(); // Prevent text selection
+    e.preventDefault(); 
   }
 }
 
@@ -724,7 +731,7 @@ function handleMouseMove(e) {
     STATE.targetOffset.x = STATE.offset.x;
     STATE.targetOffset.y = STATE.offset.y;
     STATE.lastMousePos = { x, y };
-    e.preventDefault(); // Prevent text selection
+    e.preventDefault(); 
   } else {
     STATE.lastMousePos = { x, y };
     const mouseWorldX = x - STATE.offset.x;
@@ -748,12 +755,8 @@ function updateTooltip() {
   if (STATE.hoverIdx >= 0) {
     const concept = STATE.concepts[STATE.hoverIdx];
     let content = `<h3>${concept.title}</h3><p>${concept.description}</p>`;
-    if (concept.isSynthetic) {
-      content = `<div style="color: #007aff; font-weight: 600; font-size: 10px; margin-bottom: 4px;">synthèse automatique</div>` + content;
-    }
-    if (concept.context) {
-      content += `<div class="context">« ${concept.context} »</div>`;
-    }
+    if (concept.isSynthetic) { content = `<div style="color: #007aff; font-weight: 600; font-size: 10px; margin-bottom: 4px;">synthèse automatique</div>` + content; }
+    if (concept.context) { content += `<div class="context">« ${concept.context} »</div>`; }
     tooltip.innerHTML = content;
     tooltip.style.left = (STATE.lastMousePos.x + 16) + 'px';
     tooltip.style.top = (STATE.lastMousePos.y + 16) + 'px';
@@ -761,11 +764,8 @@ function updateTooltip() {
   } else if (STATE.hoverLink) {
     const conceptA = STATE.concepts[STATE.hoverLink.idxA];
     const conceptB = STATE.concepts[STATE.hoverLink.idxB];
-    if (STATE.hoverLink.isTension) {
-      tooltip.innerHTML = `<h3>tension détectée</h3><p>friction entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${STATE.hoverLink.explanation}</p>`;
-    } else {
-      tooltip.innerHTML = `<h3>relation logique</h3><p>proximité sémantique entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${Math.round(STATE.hoverLink.sim * 100)}%</p>`;
-    }
+    if (STATE.hoverLink.isTension) { tooltip.innerHTML = `<h3>tension détectée</h3><p>friction entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${STATE.hoverLink.explanation}</p>`; } 
+    else { tooltip.innerHTML = `<h3>relation logique</h3><p>proximité sémantique entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${Math.round(STATE.hoverLink.sim * 100)}%</p>`; }
     tooltip.style.left = (STATE.lastMousePos.x + 16) + 'px';
     tooltip.style.top = (STATE.lastMousePos.y + 16) + 'px';
     tooltip.classList.add('visible');
@@ -787,53 +787,32 @@ function handleCanvasClick(e) {
 }
 
 async function handleCanvasDblClick(e) {
-  // Prevent if already processing or if clicking ON a node
   if (STATE.isProcessing || STATE.hoverIdx >= 0) return;
-
   const rect = STATE.canvas.getBoundingClientRect();
   const x = e.clientX - rect.left - STATE.offset.x;
   const y = e.clientY - rect.top - STATE.offset.y;
-
   const loadedIndices = Object.keys(STATE.coordinates).map(Number);
   if (loadedIndices.length < 2) return;
-
-  // Find two closest nodes
   let distances = loadedIndices.map(idx => {
     const dx = STATE.coordinates[idx][0] - x;
     const dy = STATE.coordinates[idx][1] - y;
     return { idx, dist: Math.hypot(dx, dy) };
   });
-
   distances.sort((a, b) => a.dist - b.dist);
   const nodeA = STATE.concepts[distances[0].idx];
   const nodeB = STATE.concepts[distances[1].idx];
-
-  // Show visual loader
   STATE.loadingNode = { x, y };
   updateStatus('synthèse en cours...');
   STATE.isProcessing = true;
-
   try {
     const bridge = await fetchBridge(nodeA, nodeB);
     const newIdx = STATE.concepts.length;
-    
-    const syntheticNode = {
-      title: bridge.title,
-      description: bridge.description,
-      weight: bridge.weight,
-      isSynthetic: true,
-      context: `synthèse entre "${nodeA.title}" et "${nodeB.title}"`
-    };
-
+    const syntheticNode = { title: bridge.title, description: bridge.description, weight: bridge.weight, isSynthetic: true, context: `synthèse entre "${nodeA.title}" et "${nodeB.title}"` };
     STATE.concepts.push(syntheticNode);
     STATE.coordinates[newIdx] = [x, y];
     STATE.velocities[newIdx] = [0, 0];
-    
-    // Handle tensions if specified
     if (bridge.isTensionA) STATE.tensions.push({ source: bridge.title, target: nodeA.title, explanation: bridge.relationToA });
     if (bridge.isTensionB) STATE.tensions.push({ source: bridge.title, target: nodeB.title, explanation: bridge.relationToB });
-    
-    // Add semantic links anyway for physics
     STATE.similarities[newIdx] = {};
     STATE.similarities[newIdx][distances[0].idx] = 0.8;
     STATE.similarities[newIdx][distances[1].idx] = 0.8;
@@ -841,7 +820,6 @@ async function handleCanvasDblClick(e) {
     if (!STATE.similarities[distances[1].idx]) STATE.similarities[distances[1].idx] = {};
     STATE.similarities[distances[0].idx][newIdx] = 0.8;
     STATE.similarities[distances[1].idx][newIdx] = 0.8;
-
     renderNotionsList();
     updateStatus('synthèse terminée');
     STATE.isProcessing = false;
