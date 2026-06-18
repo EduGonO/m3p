@@ -427,7 +427,7 @@
       background: #ffffff;
       border: 1px solid #e5e5e7;
       border-radius: 16px;
-      max-width: 800px;
+      max-width: 700px;
       width: 100%;
       max-height: 85vh;
       overflow-y: auto;
@@ -451,63 +451,36 @@
     }
 
     .modal-content h2 {
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 500;
-      margin-bottom: 32px;
+      margin-bottom: 40px;
       text-transform: lowercase;
       letter-spacing: -0.02em;
-    }
-
-    .tab-nav {
-      display: flex;
-      gap: 24px;
       border-bottom: 1px solid #f5f5f7;
-      margin-bottom: 32px;
-    }
-
-    .tab-btn {
-      padding: 12px 0;
-      font-size: 13px;
-      color: #86868b;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s ease;
-      text-transform: lowercase;
-      font-weight: 500;
-    }
-
-    .tab-btn.active {
-      color: #1d1d1f;
-      border-bottom-color: #1d1d1f;
-    }
-
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-      animation: fadeIn 0.3s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
+      padding-bottom: 20px;
     }
 
     .modal-section {
-      margin-bottom: 32px;
+      margin-bottom: 48px;
     }
 
     .modal-section h3 {
-      font-size: 14px;
-      font-weight: 600;
+      font-size: 11px;
+      font-weight: 700;
       color: #1d1d1f;
-      text-transform: lowercase;
-      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 16px;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 12px;
+    }
+
+    .modal-section h3::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #f5f5f7;
     }
 
     .modal-section p {
@@ -518,19 +491,13 @@
     }
 
     .modal-example {
-      padding: 20px;
+      padding: 24px;
       background: #fafafa;
-      border-radius: 8px;
+      border-radius: 12px;
       font-size: 12px;
       border-left: 3px solid #e5e5e7;
       color: #86868b;
-    }
-
-    .feature-icon {
-      width: 8px;
-      height: 8px;
-      border-radius: 4px;
-      display: inline-block;
+      margin-top: 16px;
     }
 
     .tension-line-preview {
@@ -538,22 +505,8 @@
       width: 40px;
       height: 2px;
       background: #ff3b30;
-      margin-right: 8px;
+      margin-right: 12px;
       vertical-align: middle;
-      position: relative;
-    }
-
-    .visual-mockup {
-      margin: 20px 0;
-      padding: 24px;
-      background: #000;
-      border-radius: 12px;
-      font-family: monospace;
-      color: #fff;
-      font-size: 11px;
-      line-height: 1.4;
-      white-space: pre;
-      overflow-x: auto;
     }
 
     .synthetic-node-preview {
@@ -564,7 +517,20 @@
       display: inline-block;
       box-shadow: 0 0 10px rgba(0, 122, 255, 0.4);
       vertical-align: middle;
-      margin-right: 8px;
+      margin-right: 12px;
+    }
+
+    .visual-mockup {
+      margin: 24px 0;
+      padding: 24px;
+      background: #fdfdfd;
+      border: 1px solid #f5f5f7;
+      border-radius: 12px;
+      font-family: "SF Mono", "Menlo", monospace;
+      color: #86868b;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: pre-wrap;
     }
   </style>
 </head>
@@ -628,51 +594,43 @@
       <div class="modal-close" id="modalClose">×</div>
       <h2>manuel de navigation conceptuelle</h2>
       
-      <div class="tab-nav">
-        <div class="tab-btn active" data-tab="philosophy">philosophie</div>
-        <div class="tab-btn" data-tab="mechanics">mécaniques</div>
-        <div class="tab-btn" data-tab="anamnesis">anamnèse</div>
+      <div class="modal-section">
+        <h3>I. philosophie : le logos et l'apeiron</h3>
+        <p>cette plateforme cartographie la structure même de votre pensée. en ajustant la <strong>force des liens</strong>, vous naviguez entre deux pôles fondamentaux :</p>
+        <div class="visual-mockup">
+[ APEIRON ] <----------------------------------------> [ LOGOS ]
+  (bas)                                                 (haut)
+flux intuitif                                      structure rigide
+associations latentes                             nécessité logique
+        </div>
+        <p>le réglage "haut" (logos) ne conserve que les associations les plus robustes, tandis que le réglage "bas" (apeiron) laisse émerger les intuitions sémantiques plus diffuses.</p>
       </div>
 
-      <div id="philosophy" class="tab-content active">
-        <div class="modal-section">
-          <h3>le logos vs l'apeiron</h3>
-          <p>cette plateforme ne se contente pas d'extraire des mots-clés ; elle cartographie la structure même de votre pensée. en ajustant la <strong>force des liens</strong>, vous naviguez entre deux pôles :</p>
-          <div class="modal-example">
-            <strong>le logos (haut)</strong> : la raison ordonnatrice. ne conserve que les structures logiques les plus rigides et explicites du texte.<br><br>
-            <strong>l'apeiron (bas)</strong> : l'infini, l'indéfini. laisse émerger les associations sémantiques latentes, les intuitions et les flux de pensée plus diffus.
-          </div>
+      <div class="modal-section">
+        <h3>II. mécaniques : les lignes de force</h3>
+        <p>le paysage est un système physique vivant où chaque node exerce une influence sur les autres.</p>
+        <p>— <strong>nodes</strong> : les concepts, noms ou idées extraits du texte. leur taille varie selon leur "poids" conceptuel (leur importance relative dans le document).</p>
+        <p>— <strong>liens sémantiques</strong> : les lignes grises fines indiquent une proximité sémantique ou une corrélation thématique stable.</p>
+      </div>
+
+      <div class="modal-section">
+        <h3>III. polemos : les lignes de tension</h3>
+        <p><span class="tension-line-preview"></span> les <strong>ressorts vibrants rouges</strong> visualisent le "polemos" (le conflit). ils identifient où deux concepts s'opposent, créent une friction logique ou une contradiction nécessaire au mouvement de la pensée.</p>
+        <div class="modal-example">
+          <strong>exemple :</strong> une tension entre "volonté individuelle" et "structure sociale" sera visualisée par un lien rouge exerçant une force de répulsion, empêchant les deux concepts de se fusionner totalement.
         </div>
       </div>
 
-      <div id="mechanics" class="tab-content">
-        <div class="modal-section">
-          <h3>le polemos (tensions)</h3>
-          <p>les <span class="tension-line-preview"></span> <strong>lignes de tension rouges</strong> visualisent le conflit. elles identifient où deux concepts s'opposent, se contredisent ou créent une friction logique nécessaire au mouvement de la pensée.</p>
-          <div class="visual-mockup">
-(Concept A)  <-~~ vibration rouge ~~->  (Concept B)
-    ^                                       ^
-    |                                       |
-    [ force de répulsion physique dans l'espace ]
-          </div>
-          <p>ces liens vibrent et repoussent les nodes pour illustrer physiquement l'instabilité de leur relation.</p>
-        </div>
-      </div>
-
-      <div id="anamnesis" class="tab-content">
-        <div class="modal-section">
-          <h3>zone d'anamnèse</h3>
-          <p>l'anamnèse est le processus de ressouvenir. en effectuant un <strong>double-clic</strong> sur un espace vide du paysage, vous invoquez l'intelligence pour synthétiser un nouveau concept à partir du vide entre deux idées proches.</p>
-          <div class="modal-example">
-            <span class="synthetic-node-preview"></span> <strong>node synthétique</strong> : représenté par une aura bleue pulsante. c'est une création dialectique qui tente de résoudre une tension ou de fusionner deux prémisses en une conclusion nouvelle.
-          </div>
-          <div class="visual-mockup">
-  [ Idée 1 ]              [ Idée 2 ]
-       \                  /
-        \      ( ? )     /   <-- Double-clic ici
-         \      |      /
-          [ Synthèse ]       <-- Création instantanée
-          </div>
+      <div id="anamnesis" class="modal-section">
+        <h3>IV. anamnèse : la zone de synthèse</h3>
+        <p>en effectuant un <strong>double-clic</strong> sur un espace vide du paysage, vous invoquez l'intelligence pour synthétiser un nouveau concept à partir du vide entre deux idées proches.</p>
+        <p><span class="synthetic-node-preview"></span> le <strong>node synthétique</strong> (aura bleue) est une création dialectique qui tente de résoudre une tension ou de fusionner deux prémisses en une conclusion nouvelle.</p>
+        <div class="visual-mockup">
+( Idée A )       ( Idée B )
+     \             /
+      \ dbl-clic  /
+       \    v    /
+        ( SYNTHÈSE )
         </div>
       </div>
     </div>

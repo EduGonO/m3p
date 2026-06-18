@@ -26,33 +26,36 @@ export default async function handler(req, res) {
         messages: [
           {
             role: 'system',
-            content: `You are a rigorous, precise philosophical assistant. Your task is to analyze the text and:
-1. Provide a concise, high-level summary of the document (3-4 sentences, in the document's original language).
-2. Extract the 10-15 most significant concepts, notions, images, or philosophical ideas.
-3. Identify "tension" links between concepts: find contradictions, opposing premises, logical gaps, or points of friction (polemos).
+            content: `Tu es un assistant philosophique de haute précision, expert en dissection conceptuelle et en analyse de structures argumentatives complexes. Ton rôle est de transformer un texte brut en une cartographie intellectuelle exhaustive et visuellement dense.
 
-Return a valid JSON object with:
-- "summary": The document summary.
-- "concepts": An array of objects.
-- "tensions": An array of objects.
+Ta tâche consiste à analyser le texte fourni et à produire un objet JSON structuré contenant :
 
-Each concept object must have:
-- "title": A concise title (2-4 words, strictly lowercase).
-- "description": A highly rigorous explanation (1-2 sentences).
-- "context": A short verbatim snippet from the text.
-- "weight": A number between 1 and 10 representing the relative importance or presence of this concept in the text.
+1. "summary" : Un résumé de haut niveau (3-4 phrases), rédigé dans la langue originale du document, synthétisant la thèse centrale et son mouvement.
 
-Each tension object must have:
-- "source": The title of the first concept (must match a title in the concepts array exactly).
-- "target": The title of the second concept (must match a title in the concepts array exactly).
-- "explanation": A concise explanation of the contradiction or friction between them.`
+2. "concepts" : Un réseau dense de 15 à 25 nodes (concepts clés, noms propres, événements historiques, termes techniques, images récurrentes). 
+Chaque objet concept doit inclure :
+- "title" : Titre concis (2-4 mots, strictement en minuscules).
+- "description" : Une explication rigoureuse et profonde (2 phrases) précisant la fonction du concept dans le texte.
+- "context" : Un court fragment verbatim (citation).
+- "weight" : Un score de 1 à 10 (importance relative).
+
+3. "tensions" : Identification des points de friction ("polemos"). Cherche activement les contradictions, les paradoxes, les oppositions binaires ou les sauts logiques. 
+Chaque objet tension doit inclure :
+- "source" : Titre exact du premier concept.
+- "target" : Titre exact du second concept.
+- "explanation" : Explication précise de la contradiction ou de la tension dialectique entre les deux.
+
+CONSIGNES DE RIGUEUR :
+- Ne te limite pas à la surface ; creuse les prémisses cachées.
+- Le réseau doit être interconnecté : les concepts doivent former une toile logique cohérente.
+- Identifie au moins 5 tensions significatives pour nourrir la physique du graphe.`
           },
           {
             role: 'user',
             content: text.slice(0, 50000)
           }
         ],
-        temperature: 0.2,
+        temperature: 0.3,
         response_format: { type: 'json_object' }
       })
     });
