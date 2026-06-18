@@ -592,46 +592,37 @@
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal-content">
       <div class="modal-close" id="modalClose">×</div>
-      <h2>manuel de navigation conceptuelle</h2>
+      <h2>aide & fonctionnement</h2>
       
       <div class="modal-section">
-        <h3>I. philosophie : le logos et l'apeiron</h3>
-        <p>cette plateforme cartographie la structure même de votre pensée. en ajustant la <strong>force des liens</strong>, vous naviguez entre deux pôles fondamentaux :</p>
+        <h3>Comment ça marche</h3>
+        <p>Cette plateforme analyse vos documents (PDF, texte ou Markdown) pour en extraire les concepts clés et les organiser automatiquement dans un espace interactif.</p>
+        <p>Chaque point représente une idée, une notion ou un nom important trouvé dans votre texte. Plus un point est grand, plus le concept est central dans votre document.</p>
+      </div>
+
+      <div class="modal-section">
+        <h3>Ajuster la carte (Force des liens)</h3>
+        <p>Le curseur "Force des liens" vous permet de contrôler la précision de l'affichage :</p>
         <div class="visual-mockup">
-[ APEIRON ] <----------------------------------------> [ LOGOS ]
-  (bas)                                                 (haut)
-flux intuitif                                      structure rigide
-associations latentes                             nécessité logique
+[ BAS ] <----------------------------------------> [ HAUT ]
+Affiche toutes les connexions,           Ne garde que les liens les 
+même les plus subtiles.                  plus forts et évidents.
         </div>
-        <p>le réglage "haut" (logos) ne conserve que les associations les plus robustes, tandis que le réglage "bas" (apeiron) laisse émerger les intuitions sémantiques plus diffuses.</p>
+        <p>Un réglage bas permet de voir un nuage d'associations libres, tandis qu'un réglage haut met en lumière la structure logique principale.</p>
       </div>
 
       <div class="modal-section">
-        <h3>II. mécaniques : les lignes de force</h3>
-        <p>le paysage est un système physique vivant où chaque node exerce une influence sur les autres.</p>
-        <p>— <strong>nodes</strong> : les concepts, noms ou idées extraits du texte. leur taille varie selon leur "poids" conceptuel (leur importance relative dans le document).</p>
-        <p>— <strong>liens sémantiques</strong> : les lignes grises fines indiquent une proximité sémantique ou une corrélation thématique stable.</p>
-      </div>
-
-      <div class="modal-section">
-        <h3>III. polemos : les lignes de tension</h3>
-        <p><span class="tension-line-preview"></span> les <strong>ressorts vibrants rouges</strong> visualisent le "polemos" (le conflit). ils identifient où deux concepts s'opposent, créent une friction logique ou une contradiction nécessaire au mouvement de la pensée.</p>
+        <h3>Lignes de tension rouges</h3>
+        <p><span class="tension-line-preview"></span> Les <strong>lignes rouges vibrantes</strong> représentent des tensions ou des contradictions détectées entre deux idées. Elles indiquent des points de friction où le texte présente des arguments opposés ou des paradoxes.</p>
         <div class="modal-example">
-          <strong>exemple :</strong> une tension entre "volonté individuelle" et "structure sociale" sera visualisée par un lien rouge exerçant une force de répulsion, empêchant les deux concepts de se fusionner totalement.
+          <strong>Exemple :</strong> Si votre texte oppose la "liberté individuelle" à la "sécurité collective", une ligne rouge apparaîtra pour visualiser ce conflit.
         </div>
       </div>
 
-      <div id="anamnesis" class="modal-section">
-        <h3>IV. anamnèse : la zone de synthèse</h3>
-        <p>en effectuant un <strong>double-clic</strong> sur un espace vide du paysage, vous invoquez l'intelligence pour synthétiser un nouveau concept à partir du vide entre deux idées proches.</p>
-        <p><span class="synthetic-node-preview"></span> le <strong>node synthétique</strong> (aura bleue) est une création dialectique qui tente de résoudre une tension ou de fusionner deux prémisses en une conclusion nouvelle.</p>
-        <div class="visual-mockup">
-( Idée A )       ( Idée B )
-     \             /
-      \ dbl-clic  /
-       \    v    /
-        ( SYNTHÈSE )
-        </div>
+      <div class="modal-section">
+        <h3>Double-clic (Synthèse)</h3>
+        <p>En faisant un <strong>double-clic</strong> sur un espace vide de la carte, l'intelligence artificielle identifie les deux concepts les plus proches et génère une nouvelle idée qui les relie ou les synthétise.</p>
+        <p><span class="synthetic-node-preview"></span> Cette nouvelle idée apparaît sous la forme d'un point bleu pulsant, représentant une synthèse créée à partir de votre document.</p>
       </div>
     </div>
   </div>

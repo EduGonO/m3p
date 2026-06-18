@@ -24,7 +24,8 @@ const STATE = {
   lastMousePos: { x: 0, y: 0 },
   progressInterval: null,
   threshold: 0.55,     // Dynamic semantic link threshold
-  time: 0              // For animations
+  time: 0,             // For animations
+  loadingNode: null    // { x, y } for the synthesis loader
 };
 
 // ============================================================================
@@ -50,17 +51,6 @@ document.addEventListener('DOMContentLoaded', () => {
     modal.addEventListener('click', (e) => { 
       if (e.target === modal) modal.style.display = 'none'; 
     });
-    
-    // Tab logic
-    modal.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        modal.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        modal.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        btn.classList.add('active');
-        const tabId = btn.getAttribute('data-tab');
-        document.getElementById(tabId).classList.add('active');
-      });
-    });
   }
 
   // Slider interaction
@@ -85,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   
   uploadZone.addEventListener('dragleave', () => {
-    uploadZone.classList.remove('dragleave');
+    uploadZone.classList.remove('dragover');
   });
   
   uploadZone.addEventListener('drop', e => {
@@ -613,6 +603,22 @@ function draw() {
     }
   });
 
+  // Draw synthesis loading state
+  if (STATE.loadingNode) {
+    const { x, y } = STATE.loadingNode;
+    ctx.save();
+    ctx.fillStyle = '#007aff';
+    ctx.globalAlpha = 0.6 + Math.sin(STATE.time * 4) * 0.3;
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.font = '10px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Synthèse en cours...', x, y + 20);
+    ctx.restore();
+  }
+
   ctx.restore();
   updateTooltip();
 }
@@ -743,7 +749,7 @@ function updateTooltip() {
     const concept = STATE.concepts[STATE.hoverIdx];
     let content = `<h3>${concept.title}</h3><p>${concept.description}</p>`;
     if (concept.isSynthetic) {
-      content = `<div style="color: #007aff; font-weight: 600; font-size: 10px; margin-bottom: 4px;">anamnèse synthétique</div>` + content;
+      content = `<div style="color: #007aff; font-weight: 600; font-size: 10px; margin-bottom: 4px;">synthèse automatique</div>` + content;
     }
     if (concept.context) {
       content += `<div class="context">« ${concept.context} »</div>`;
@@ -756,9 +762,9 @@ function updateTooltip() {
     const conceptA = STATE.concepts[STATE.hoverLink.idxA];
     const conceptB = STATE.concepts[STATE.hoverLink.idxB];
     if (STATE.hoverLink.isTension) {
-      tooltip.innerHTML = `<h3>tension sémantique (polemos)</h3><p>friction entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${STATE.hoverLink.explanation}</p>`;
+      tooltip.innerHTML = `<h3>tension détectée</h3><p>friction entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${STATE.hoverLink.explanation}</p>`;
     } else {
-      tooltip.innerHTML = `<h3>relation sémantique (logos)</h3><p>proximité sémantique entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${Math.round(STATE.hoverLink.sim * 100)}%</p>`;
+      tooltip.innerHTML = `<h3>relation logique</h3><p>proximité sémantique entre <strong>${conceptA.title}</strong> et <strong>${conceptB.title}</strong>: ${Math.round(STATE.hoverLink.sim * 100)}%</p>`;
     }
     tooltip.style.left = (STATE.lastMousePos.x + 16) + 'px';
     tooltip.style.top = (STATE.lastMousePos.y + 16) + 'px';
@@ -781,7 +787,8 @@ function handleCanvasClick(e) {
 }
 
 async function handleCanvasDblClick(e) {
-  if (STATE.hoverIdx >= 0 || STATE.isProcessing) return;
+  // Prevent if already processing or if clicking ON a node
+  if (STATE.isProcessing || STATE.hoverIdx >= 0) return;
 
   const rect = STATE.canvas.getBoundingClientRect();
   const x = e.clientX - rect.left - STATE.offset.x;
@@ -801,7 +808,9 @@ async function handleCanvasDblClick(e) {
   const nodeA = STATE.concepts[distances[0].idx];
   const nodeB = STATE.concepts[distances[1].idx];
 
-  updateStatus('invocation de l\'anamnèse...');
+  // Show visual loader
+  STATE.loadingNode = { x, y };
+  updateStatus('synthèse en cours...');
   STATE.isProcessing = true;
 
   try {
@@ -813,7 +822,7 @@ async function handleCanvasDblClick(e) {
       description: bridge.description,
       weight: bridge.weight,
       isSynthetic: true,
-      context: `anamnèse entre "${nodeA.title}" et "${nodeB.title}"`
+      context: `synthèse entre "${nodeA.title}" et "${nodeB.title}"`
     };
 
     STATE.concepts.push(syntheticNode);
@@ -828,16 +837,20 @@ async function handleCanvasDblClick(e) {
     STATE.similarities[newIdx] = {};
     STATE.similarities[newIdx][distances[0].idx] = 0.8;
     STATE.similarities[newIdx][distances[1].idx] = 0.8;
+    if (!STATE.similarities[distances[0].idx]) STATE.similarities[distances[0].idx] = {};
+    if (!STATE.similarities[distances[1].idx]) STATE.similarities[distances[1].idx] = {};
     STATE.similarities[distances[0].idx][newIdx] = 0.8;
     STATE.similarities[distances[1].idx][newIdx] = 0.8;
 
     renderNotionsList();
-    updateStatus('anamnèse accomplie');
+    updateStatus('synthèse terminée');
     STATE.isProcessing = false;
+    STATE.loadingNode = null;
   } catch (err) {
     console.error(err);
-    updateStatus('échec de l\'anamnèse');
+    updateStatus('échec de la synthèse');
     STATE.isProcessing = false;
+    STATE.loadingNode = null;
   }
 }
 
